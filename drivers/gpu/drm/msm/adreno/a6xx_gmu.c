@@ -860,23 +860,23 @@ static int a6xx_gmu_memory_probe(struct a6xx_gmu *gmu)
 }
 
 /* Get the list of RPMh voltage levels from cmd-db */
-static int a6xx_gmu_rpmh_arc_cmds(const char *id, void *vals, int size)
+static const u16 *a6xx_gmu_rpmh_arc_cmds(const char *id, int *size)
 {
-	u32 len = cmd_db_read_aux_data_len(id);
+	size_t len;
+	const u16 *vals;
 
-	if (!len)
-		return 0;
-
-	if (WARN_ON(len > size))
-		return -EINVAL;
-
-	cmd_db_read_aux_data(id, vals, len);
-
+	vals = cmd_db_read_aux_data(id, &len);
 	/*
 	 * The data comes back as an array of unsigned shorts so adjust the
 	 * count accordingly
 	 */
-	return len >> 1;
+	len >>= 1;
+
+	if (!len || WARN_ON(len > 16))
+		len = 0;
+
+	*size = len;
+	return vals;
 }
 
 /* Return the 'arc-level' for the given frequency */
@@ -970,14 +970,14 @@ static int a6xx_gmu_rpmh_votes_init(struct a6xx_gmu *gmu)
 	struct adreno_gpu *adreno_gpu = &a6xx_gpu->base;
 	struct msm_gpu *gpu = &adreno_gpu->base;
 
-	u16 gx[16], cx[16], mx[16];
+	u16 *gx, *cx, *mx;
 	u32 gxcount, cxcount, mxcount;
 	int ret;
 
 	/* Get the list of available voltage levels for each component */
-	gxcount = a6xx_gmu_rpmh_arc_cmds("gfx.lvl", gx, sizeof(gx));
-	cxcount = a6xx_gmu_rpmh_arc_cmds("cx.lvl", cx, sizeof(cx));
-	mxcount = a6xx_gmu_rpmh_arc_cmds("mx.lvl", mx, sizeof(mx));
+	gx = a6xx_gmu_rpmh_arc_cmds("gfx.lvl", &gxcount);
+	cx = a6xx_gmu_rpmh_arc_cmds("cx.lvl", &cxcount);
+	mx = a6xx_gmu_rpmh_arc_cmds("mx.lvl", &mxcount);
 
 	/* Build the GX votes */
 	ret = a6xx_gmu_rpmh_arc_votes_init(&gpu->pdev->dev, gmu->gx_arc_votes,
