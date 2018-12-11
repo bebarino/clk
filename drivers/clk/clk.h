@@ -10,20 +10,24 @@
  */
 
 struct clk_hw;
+struct device;
+struct of_phandle_args;
 
 #if defined(CONFIG_OF) && defined(CONFIG_COMMON_CLK)
-struct clk *__of_clk_get_from_provider(struct of_phandle_args *clkspec,
+struct clk *__of_clk_get_from_provider(struct device *dev,
+				       struct of_phandle_args *clkspec,
 				       const char *dev_id, const char *con_id);
 #endif
 
 #ifdef CONFIG_COMMON_CLK
-struct clk *clk_hw_create_clk(struct clk_hw *hw,
+struct clk *clk_hw_create_clk(struct device *dev, struct clk_hw *hw,
 			      const char *dev_id, const char *con_id);
 void __clk_put(struct clk *clk);
 #else
 /* All these casts to avoid ifdefs in clkdev... */
 static inline struct clk *
-clk_hw_create_clk(struct clk_hw *hw, const char *dev_id, const char *con_id)
+clk_hw_create_clk(struct device *dev, struct clk_hw *hw, const char *dev_id,
+		  const char *con_id)
 {
 	return (struct clk *)hw;
 }

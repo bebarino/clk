@@ -84,6 +84,7 @@ struct clk_core {
 
 struct clk {
 	struct clk_core	*core;
+	struct device *dev;
 	const char *dev_id;
 	const char *con_id;
 	unsigned long min_rate;
@@ -3265,6 +3266,7 @@ static void free_clk(struct clk *clk)
 /**
  * clk_hw_create_clk: Allocate and link a clk consumer to a clk_core given
  * a clk_hw
+ * @dev: clk consumer device
  * @hw: clk_hw associated with the clk being consumed
  * @dev_id: string describing device name
  * @con_id: connection ID string on device
@@ -3273,7 +3275,7 @@ static void free_clk(struct clk *clk)
  * consumers. It connects a consumer to the clk_core and clk_hw structures
  * used by the framework and clk provider respectively.
  */
-struct clk *clk_hw_create_clk(struct clk_hw *hw,
+struct clk *clk_hw_create_clk(struct device *dev, struct clk_hw *hw,
 			      const char *dev_id, const char *con_id)
 {
 	struct clk *clk;
@@ -3287,6 +3289,7 @@ struct clk *clk_hw_create_clk(struct clk_hw *hw,
 	clk = alloc_clk(core, dev_id, con_id);
 	if (IS_ERR(clk))
 		return clk;
+	clk->dev = dev;
 
 	if (!try_module_get(core->owner)) {
 		free_clk(clk);
@@ -4033,7 +4036,8 @@ __of_clk_get_hw_from_provider(struct of_clk_provider *provider,
 	return __clk_get_hw(clk);
 }
 
-struct clk *__of_clk_get_from_provider(struct of_phandle_args *clkspec,
+struct clk *__of_clk_get_from_provider(struct device *dev,
+				       struct of_phandle_args *clkspec,
 				       const char *dev_id, const char *con_id)
 {
 	struct of_clk_provider *provider;
@@ -4053,7 +4057,7 @@ struct clk *__of_clk_get_from_provider(struct of_phandle_args *clkspec,
 	}
 	mutex_unlock(&of_clk_mutex);
 
-	return clk_hw_create_clk(hw, dev_id, con_id);
+	return clk_hw_create_clk(dev, hw, dev_id, con_id);
 }
 
 /**
@@ -4066,7 +4070,7 @@ struct clk *__of_clk_get_from_provider(struct of_phandle_args *clkspec,
  */
 struct clk *of_clk_get_from_provider(struct of_phandle_args *clkspec)
 {
-	return __of_clk_get_from_provider(clkspec, NULL, __func__);
+	return __of_clk_get_from_provider(NULL, clkspec, NULL, __func__);
 }
 EXPORT_SYMBOL_GPL(of_clk_get_from_provider);
 
