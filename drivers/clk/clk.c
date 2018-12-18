@@ -3424,9 +3424,15 @@ struct clk *clk_register(struct device *dev, struct clk_hw *hw)
 		}
 	}
 
-	/* avoid unnecessary string look-ups of clk_core's possible parents. */
-	core->parents = kcalloc(core->num_parents, sizeof(*core->parents),
-				GFP_KERNEL);
+	/*
+	 * Avoid unnecessary string look-ups of clk_core's possible parents by
+	 * having a cache of names to clks.
+	 */
+	if (core->num_parents <= 1)
+		core->parents = &core->parent;
+	else
+		core->parents = kcalloc(core->num_parents, sizeof(*core->parents),
+					GFP_KERNEL);
 	if (!core->parents) {
 		ret = -ENOMEM;
 		goto fail_parents;
