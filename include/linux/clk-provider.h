@@ -150,6 +150,14 @@ struct clk_duty {
  *		multiple parents.  It is optional (and unnecessary) for clocks
  *		with 0 or 1 parents.
  *
+ * @get_parent_hw: Queries the hardware to determine the parent of a clock.  The
+ *		return value is a clk_hw pointer corresponding to
+ *		the parent clock. In short, this function translates the parent
+ *		value read from hardware into a pointer to the clk_hw for that clk.
+ *		Currently only called when the clock is initialized by
+ *		__clk_init.  This callback is mandatory for clocks with
+ *		multiple parents.  It is optional for clocks with 0 or 1 parents.
+ *
  * @set_rate:	Change the rate of this clock. The requested rate is specified
  *		by the second argument, which should typically be the return
  *		of .round_rate call.  The third argument gives the parent rate
@@ -233,6 +241,7 @@ struct clk_ops {
 					  struct clk_rate_request *req);
 	int		(*set_parent)(struct clk_hw *hw, u8 index);
 	u8		(*get_parent)(struct clk_hw *hw);
+	struct clk_hw * (*get_parent_hw)(struct clk_hw *hw);
 	int		(*set_rate)(struct clk_hw *hw, unsigned long rate,
 				    unsigned long parent_rate);
 	int		(*set_rate_and_parent)(struct clk_hw *hw,
