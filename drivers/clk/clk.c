@@ -4101,9 +4101,8 @@ __of_clk_get_hw_from_provider(struct of_clk_provider *provider,
 	return __clk_get_hw(clk);
 }
 
-struct clk *__of_clk_get_from_provider(struct device *dev,
-				       struct of_phandle_args *clkspec,
-				       const char *dev_id, const char *con_id)
+static struct clk_hw *
+of_clk_get_hw_from_clkspec(struct of_phandle_args *clkspec)
 {
 	struct of_clk_provider *provider;
 	struct clk_hw *hw = ERR_PTR(-EPROBE_DEFER);
@@ -4111,7 +4110,6 @@ struct clk *__of_clk_get_from_provider(struct device *dev,
 	if (!clkspec)
 		return ERR_PTR(-EINVAL);
 
-	/* Check if we have such a provider in our array */
 	mutex_lock(&of_clk_mutex);
 	list_for_each_entry(provider, &of_clk_providers, link) {
 		if (provider->node == clkspec->np) {
@@ -4121,6 +4119,15 @@ struct clk *__of_clk_get_from_provider(struct device *dev,
 		}
 	}
 	mutex_unlock(&of_clk_mutex);
+
+	return hw;
+}
+
+struct clk *__of_clk_get_from_provider(struct device *dev,
+				       struct of_phandle_args *clkspec,
+				       const char *dev_id, const char *con_id)
+{
+	struct clk_hw *hw = of_clk_get_hw_from_clkspec(clkspec);
 
 	return clk_hw_create_clk(dev, hw, dev_id, con_id);
 }
