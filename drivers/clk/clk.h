@@ -14,12 +14,9 @@ struct device;
 struct of_phandle_args;
 
 #if defined(CONFIG_OF) && defined(CONFIG_COMMON_CLK)
-struct clk *__of_clk_get_from_provider(struct device *dev,
-				       struct of_phandle_args *clkspec,
-				       const char *dev_id, const char *con_id);
 int of_parse_clkspec(const struct device_node *np, int index, const char *name,
 		     struct of_phandle_args *out_args);
-struct clk_hw * of_clk_get_hw_from_clkspec(struct of_phandle_args *clkspec);
+struct clk_hw *of_clk_get_hw_from_clkspec(struct of_phandle_args *clkspec);
 #endif
 
 #ifdef CONFIG_COMMON_CLK

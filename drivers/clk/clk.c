@@ -4200,7 +4200,7 @@ __of_clk_get_hw_from_provider(struct of_clk_provider *provider,
 	return __clk_get_hw(clk);
 }
 
-struct clk_hw * of_clk_get_hw_from_clkspec(struct of_phandle_args *clkspec)
+struct clk_hw *of_clk_get_hw_from_clkspec(struct of_phandle_args *clkspec)
 {
 	struct of_clk_provider *provider;
 	struct clk_hw *hw = ERR_PTR(-EPROBE_DEFER);
@@ -4221,15 +4221,6 @@ struct clk_hw * of_clk_get_hw_from_clkspec(struct of_phandle_args *clkspec)
 	return hw;
 }
 
-struct clk *__of_clk_get_from_provider(struct device *dev,
-				       struct of_phandle_args *clkspec,
-				       const char *dev_id, const char *con_id)
-{
-	struct clk_hw *hw = of_clk_get_hw_from_clkspec(clkspec);
-
-	return clk_hw_create_clk(dev, hw, dev_id, con_id);
-}
-
 /**
  * of_clk_get_from_provider() - Lookup a clock from a clock provider
  * @clkspec: pointer to a clock specifier data structure
@@ -4240,7 +4231,9 @@ struct clk *__of_clk_get_from_provider(struct device *dev,
  */
 struct clk *of_clk_get_from_provider(struct of_phandle_args *clkspec)
 {
-	return __of_clk_get_from_provider(NULL, clkspec, NULL, __func__);
+	struct clk_hw *hw = of_clk_get_hw_from_clkspec(clkspec);
+
+	return clk_hw_create_clk(NULL, hw, NULL, __func__);
 }
 EXPORT_SYMBOL_GPL(of_clk_get_from_provider);
 
