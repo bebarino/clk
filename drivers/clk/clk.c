@@ -319,6 +319,69 @@ static struct clk_core *clk_core_lookup(const char *name)
 	return NULL;
 }
 
+/**
+ * clk_core_get - Find the parent of a clk using a clock specifier in DT
+ * @np: device node of device providing clk
+ * @name: name to search for in 'clock-names' of device providing clk
+ *
+ * This is the preferred method for clk providers to find the parent of a
+ * clk when the clk is registered with the CLK_PARENTS_LOCAL flag set and a
+ * struct device is passed to clk*_register(). The parent_names array is
+ * indexed and treated as a local name matching a string in the device node's
+ * 'clock-names' property. This allows clk providers to use their own namespace
+ * instead of looking for a globally unique parent string.
+ *
+ * For example the following DT snippet would allow a clock registered by the
+ * clock-controller@c001 that has CLK_PARENTS_LOCAL and a parent_names array
+ * with 'xtal' to find the clock provided by the clock-controller@f00abcd
+ * without needing to get the globally unique name of the xtal clk.
+ *
+ * 	parent: clock-controller@f00abcd {
+ * 		reg = <0xf00abcd 0xabcd>;
+ * 		#clock-cells = <0>;
+ * 	};
+ *
+ * 	clock-controller@c001 {
+ * 		reg = <0xc001 0xf00d>;
+ * 		clocks = <&parent>;
+ * 		clock-names = "xtal";
+ * 		#clock-cells = <1>;
+ * 	};
+ */
+static struct clk_core *clk_core_get(struct device *dev, const char *name)
+{
+	struct clk_hw *hw;
+	struct of_phandle_args clkspec;
+	int ret;
+
+	/* TODO: Support clkdev clk_lookups */
+	ret = of_parse_clkspec(dev->of_node, -1, name, &clkspec);
+	if (ret)
+		return NULL;
+
+	hw = of_clk_get_hw_from_clkspec(&clkspec);
+	of_node_put(clkspec.np);
+	if (IS_ERR_OR_NULL(hw))
+		return NULL;
+
+	return hw->core;
+}
+
+static void clk_core_fill_parent_index(struct clk_core *core, unsigned int index)
+{
+	struct clk_core *parent;
+	const char *pname;
+
+	pname = core->parent_names[index];
+	if (core->dev && core->flags & CLK_PARENTS_LOCAL) {
+		parent = clk_core_get(core->dev, pname);
+	} else {
+		parent = clk_core_lookup(pname);
+	}
+
+	core->parents[index] = parent;
+}
+
 static struct clk_core *clk_core_get_parent_by_index(struct clk_core *core,
 							 u8 index)
 {
@@ -326,8 +389,7 @@ static struct clk_core *clk_core_get_parent_by_index(struct clk_core *core,
 		return NULL;
 
 	if (!core->parents[index])
-		core->parents[index] =
-				clk_core_lookup(core->parent_names[index]);
+		clk_core_fill_parent_index(core, index);
 
 	return core->parents[index];
 }
@@ -2910,6 +2972,7 @@ static const struct {
 	ENTRY(CLK_SET_PARENT_GATE),
 	ENTRY(CLK_SET_RATE_PARENT),
 	ENTRY(CLK_IGNORE_UNUSED),
+	ENTRY(CLK_PARENTS_LOCAL),
 	ENTRY(CLK_IS_BASIC),
 	ENTRY(CLK_GET_RATE_NOCACHE),
 	ENTRY(CLK_SET_RATE_NO_REPARENT),
@@ -4086,6 +4149,42 @@ void devm_of_clk_del_provider(struct device *dev)
 }
 EXPORT_SYMBOL(devm_of_clk_del_provider);
 
+int of_parse_clkspec(const struct device_node *np, int index, const char *name,
+		     struct of_phandle_args *out_args)
+{
+	int ret = -ENOENT;
+
+	/* Walk up the tree of devices looking for a clock property that matches */
+	while (np) {
+		/*
+		 * For named clocks, first look up the name in the
+		 * "clock-names" property.  If it cannot be found, then index
+		 * will be an error code and of_parse_phandle_with_args() will
+		 * return -EINVAL.
+		 */
+		if (name)
+			index = of_property_match_string(np, "clock-names", name);
+		ret = of_parse_phandle_with_args(np, "clocks", "#clock-cells",
+						 index, out_args);
+		if (!ret)
+			break;
+		if (name && index >= 0)
+			break;
+
+		/*
+		 * No matching clock found on this node.  If the parent node
+		 * has a "clock-ranges" property, then we can try one of its
+		 * clocks.
+		 */
+		np = np->parent;
+		if (np && !of_get_property(np, "clock-ranges", NULL))
+			break;
+		index = 0;
+	}
+
+	return ret;
+}
+
 static struct clk_hw *
 __of_clk_get_hw_from_provider(struct of_clk_provider *provider,
 			      struct of_phandle_args *clkspec)
@@ -4101,8 +4200,7 @@ __of_clk_get_hw_from_provider(struct of_clk_provider *provider,
 	return __clk_get_hw(clk);
 }
 
-static struct clk_hw *
-of_clk_get_hw_from_clkspec(struct of_phandle_args *clkspec)
+struct clk_hw * of_clk_get_hw_from_clkspec(struct of_phandle_args *clkspec)
 {
 	struct of_clk_provider *provider;
 	struct clk_hw *hw = ERR_PTR(-EPROBE_DEFER);
