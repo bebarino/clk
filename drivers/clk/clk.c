@@ -42,6 +42,13 @@ static LIST_HEAD(clk_notifier_list);
 
 /***    private data structures    ***/
 
+struct clk_parent_map {
+	struct clk_hw		*hw;
+	struct clk_core		*core;
+	const char	 	*name;
+	const char	 	*fallback;
+};
+
 struct clk_core {
 	const char		*name;
 	const struct clk_ops	*ops;
@@ -49,8 +56,7 @@ struct clk_core {
 	struct module		*owner;
 	struct device		*dev;
 	struct clk_core		*parent;
-	const char		**parent_names;
-	struct clk_core		**parents;
+	struct clk_parent_map	*parents;
 	u8			num_parents;
 	u8			new_parent_index;
 	unsigned long		rate;
@@ -362,29 +368,29 @@ static struct clk_core *clk_core_get(struct device *dev, const char *name)
 
 static void clk_core_fill_parent_index(struct clk_core *core, unsigned int index)
 {
+	struct clk_parent_map *entry = &core->parents[index];
 	struct clk_core *parent;
-	const char *pname;
 
-	pname = core->parent_names[index];
-	if (core->dev && core->flags & CLK_PARENTS_LOCAL) {
-		parent = clk_core_get(core->dev, pname);
-	} else {
-		parent = clk_core_lookup(pname);
-	}
+	if (entry->hw)
+		parent = entry->hw->core;
+	else if (core->dev && entry->name)
+		parent = clk_core_get(core->dev, core->parents[index].name);
+	else
+		parent = clk_core_lookup(core->parents[index].fallback);
 
-	core->parents[index] = parent;
+	entry->core = parent;
 }
 
 static struct clk_core *clk_core_get_parent_by_index(struct clk_core *core,
 							 u8 index)
 {
-	if (!core || index >= core->num_parents)
+	if (!core || index >= core->num_parents || !core->parents)
 		return NULL;
 
-	if (!core->parents[index])
+	if (!core->parents[index].core)
 		clk_core_fill_parent_index(core, index);
 
-	return core->parents[index];
+	return core->parents[index].core;
 }
 
 struct clk_hw *
@@ -2408,6 +2414,7 @@ void clk_hw_reparent(struct clk_hw *hw, struct clk_hw *new_parent)
 bool clk_has_parent(struct clk *clk, struct clk *parent)
 {
 	struct clk_core *core, *parent_core;
+	int i;
 
 	/* NULL clocks should be nops, so return success if either is NULL. */
 	if (!clk || !parent)
@@ -2420,8 +2427,11 @@ bool clk_has_parent(struct clk *clk, struct clk *parent)
 	if (core->parent == parent_core)
 		return true;
 
-	return match_string(core->parent_names, core->num_parents,
-			    parent_core->name) >= 0;
+	for (i = 0; i < core->num_parents; i++)
+		if (!strcmp(core->parents[i].fallback, parent_core->name))
+			return true;
+
+	return false;
 }
 EXPORT_SYMBOL_GPL(clk_has_parent);
 
@@ -3005,9 +3015,9 @@ static int possible_parents_show(struct seq_file *s, void *data)
 	int i;
 
 	for (i = 0; i < core->num_parents - 1; i++)
-		seq_printf(s, "%s ", core->parent_names[i]);
+		seq_printf(s, "%s ", core->parents[i].fallback);
 
-	seq_printf(s, "%s\n", core->parent_names[i]);
+	seq_printf(s, "%s\n", core->parents[i].fallback);
 
 	return 0;
 }
@@ -3141,7 +3151,7 @@ static inline void clk_debug_unregister(struct clk_core *core)
  */
 static int __clk_core_init(struct clk_core *core)
 {
-	int i, ret;
+	int ret;
 	struct clk_core *orphan;
 	struct hlist_node *tmp2;
 	unsigned long rate;
@@ -3194,12 +3204,6 @@ static int __clk_core_init(struct clk_core *core)
 		ret = -EINVAL;
 		goto out;
 	}
-
-	/* throw a WARN if any entries in parent_names are NULL */
-	for (i = 0; i < core->num_parents; i++)
-		WARN(!core->parent_names[i],
-				"%s: invalid NULL in %s's .parent_names\n",
-				__func__, core->name);
 
 	ret = clk_init_parent(core);
 	if (ret)
@@ -3416,6 +3420,74 @@ struct clk *clk_hw_create_clk(struct device *dev, struct clk_hw *hw,
 	return clk;
 }
 
+static int clk_core_populate_parent_map(struct clk_core *core)
+{
+	const struct clk_init_data *init = core->hw->init;
+	u8 num_parents = init->num_parents;
+	const char * const *parent_names = init->parent_names;
+	struct clk_hw **parent_hws = init->parent_hws;
+	const struct clk_parent_data *parent_data = init->parent_data;
+	int i, ret = 0;
+	struct clk_parent_map *parents, *parent;
+
+	if (!num_parents)
+		return 0;
+
+	/*
+	 * Avoid unnecessary string look-ups of clk_core's possible parents by
+	 * having a cache of names/clk_hw pointers to clk_core pointers.
+	 */
+	parents = kcalloc(num_parents, sizeof(*parents), GFP_KERNEL);
+	core->parents = parents;
+	if (!parents)
+		return -ENOMEM;
+
+	/* Copy everything over because it might be __initdata */
+	for (i = 0, parent = parents; i < num_parents; i++, parent++) {
+		if (parent_names) {
+			/* throw a WARN if any entries are NULL */
+			WARN(!parent_names[i],
+				"%s: invalid NULL in %s's .parent_names\n",
+				__func__, core->name);
+			parent->fallback = kstrdup_const(parent_names[i],
+							 GFP_KERNEL);
+			if (!parent->fallback) {
+				ret = -ENOMEM;
+				while (--i >= 0)
+					kfree_const(parents[i].fallback);
+			}
+		} else if (parent_data) {
+			parent->hw = parent_data[i].hw;
+			parent->name = parent_data[i].name;
+			parent->fallback = parent_data[i].fallback;
+		} else if (parent_hws) {
+			parent->hw = parent_hws[i];
+		} else {
+			ret = -EINVAL;
+			WARN(1, "Must specify parents if num_parents > 0\n");
+		}
+
+		if (ret) {
+			kfree(parents);
+			return ret;
+		}
+	}
+
+	return 0;
+}
+
+static void clk_core_free_parent_map(struct clk_core *core)
+{
+	int i = core->num_parents;
+
+	if (!core->num_parents)
+		return;
+
+	while (--i >= 0)
+		kfree_const(core->parents[i].fallback);
+	kfree(core->parents);
+}
+
 /**
  * clk_register - allocate a new clock, register it and return an opaque cookie
  * @dev: device that is registering this clock
@@ -3429,7 +3501,7 @@ struct clk *clk_hw_create_clk(struct device *dev, struct clk_hw *hw,
  */
 struct clk *clk_register(struct device *dev, struct clk_hw *hw)
 {
-	int i, ret;
+	int ret;
 	struct clk_core *core;
 
 	core = kzalloc(sizeof(*core), GFP_KERNEL);
@@ -3462,39 +3534,9 @@ struct clk *clk_register(struct device *dev, struct clk_hw *hw)
 	core->max_rate = ULONG_MAX;
 	hw->core = core;
 
-	/* allocate local copy in case parent_names is __initdata */
-	core->parent_names = kcalloc(core->num_parents, sizeof(char *),
-					GFP_KERNEL);
-
-	if (!core->parent_names) {
-		ret = -ENOMEM;
-		goto fail_parent_names;
-	}
-
-
-	/* copy each string name in case parent_names is __initdata */
-	for (i = 0; i < core->num_parents; i++) {
-		core->parent_names[i] = kstrdup_const(hw->init->parent_names[i],
-						GFP_KERNEL);
-		if (!core->parent_names[i]) {
-			ret = -ENOMEM;
-			goto fail_parent_names_copy;
-		}
-	}
-
-	/*
-	 * Avoid unnecessary string look-ups of clk_core's possible parents by
-	 * having a cache of names to clks.
-	 */
-	if (core->num_parents <= 1)
-		core->parents = &core->parent;
-	else
-		core->parents = kcalloc(core->num_parents, sizeof(*core->parents),
-					GFP_KERNEL);
-	if (!core->parents) {
-		ret = -ENOMEM;
+	ret = clk_core_populate_parent_map(core);
+	if (ret)
 		goto fail_parents;
-	};
 
 	INIT_HLIST_HEAD(&core->clks);
 
@@ -3505,7 +3547,7 @@ struct clk *clk_register(struct device *dev, struct clk_hw *hw)
 	hw->clk = alloc_clk(core, NULL, NULL);
 	if (IS_ERR(hw->clk)) {
 		ret = PTR_ERR(hw->clk);
-		goto fail_parents;
+		goto fail_create_clk;
 	}
 
 	clk_core_link_consumer(hw->core, hw->clk);
@@ -3521,13 +3563,9 @@ struct clk *clk_register(struct device *dev, struct clk_hw *hw)
 	free_clk(hw->clk);
 	hw->clk = NULL;
 
+fail_create_clk:
+	clk_core_free_parent_map(core);
 fail_parents:
-	kfree(core->parents);
-fail_parent_names_copy:
-	while (--i >= 0)
-		kfree_const(core->parent_names[i]);
-	kfree(core->parent_names);
-fail_parent_names:
 fail_ops:
 	kfree_const(core->name);
 fail_name:
@@ -3557,15 +3595,10 @@ EXPORT_SYMBOL_GPL(clk_hw_register);
 static void __clk_release(struct kref *ref)
 {
 	struct clk_core *core = container_of(ref, struct clk_core, ref);
-	int i = core->num_parents;
 
 	lockdep_assert_held(&prepare_lock);
 
-	kfree(core->parents);
-	while (--i >= 0)
-		kfree_const(core->parent_names[i]);
-
-	kfree(core->parent_names);
+	clk_core_free_parent_map(core);
 	kfree_const(core->name);
 	kfree(core);
 }

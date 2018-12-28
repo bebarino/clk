@@ -266,6 +266,18 @@ struct clk_ops {
 };
 
 /**
+ * struct clk_parent_data - clk parent information
+ * @name: parent name local to provider registering clk
+ * @fallback: globally unique parent name (used as a fallback)
+ * @hw: parent clk_hw pointer (used for clk providers with internal clks)
+ */
+struct clk_parent_data {
+	struct clk_hw 	*hw;
+	const char	*name;
+	const char	*fallback;
+};
+
+/**
  * struct clk_init_data - holds init data that's common to all clocks and is
  * shared between the clock provider and the common clock framework.
  *
@@ -278,7 +290,10 @@ struct clk_ops {
 struct clk_init_data {
 	const char		*name;
 	const struct clk_ops	*ops;
-	const char		* const *parent_names;
+	/* Only one of the following three should be assigned */
+	const char		* const *parent_names; /* If NULL (and num_parents != 0) look at parent_data and parent_hws */
+	const struct clk_parent_data	*parent_data;
+	struct clk_hw			**parent_hws;
 	u8			num_parents;
 	unsigned long		flags;
 };
