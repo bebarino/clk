@@ -371,7 +371,8 @@ static struct clk_core *clk_core_get(struct clk_core *core, const char *name)
 	return hw->core;
 }
 
-static void clk_core_fill_parent_index(struct clk_core *core, u8 index)
+static struct clk_core *
+clk_core_fill_parent_index(struct clk_core *core, u8 index)
 {
 	struct clk_parent_map *entry = &core->parents[index];
 	struct clk_core *parent = ERR_PTR(-ENOENT);
@@ -385,19 +386,25 @@ static void clk_core_fill_parent_index(struct clk_core *core, u8 index)
 			parent = clk_core_lookup(entry->fallback);
 	}
 
-	entry->core = parent;
+	/* Only cache it if it's not an error */
+	if (!IS_ERR(parent))
+		entry->core = parent;
+
+	return parent;
 }
 
 static struct clk_core *clk_core_get_parent_by_index(struct clk_core *core,
 							 u8 index)
 {
-	if (!core || index >= core->num_parents || !core->parents)
+	if (!core)
 		return NULL;
+	if (index >= core->num_parents || !core->parents)
+		return ERR_PTR(-EINVAL);
 
-	if (!core->parents[index].core)
-		clk_core_fill_parent_index(core, index);
+	if (core->parents[index].core)
+		return core->parents[index].core;
 
-	return core->parents[index].core;
+	return clk_core_fill_parent_index(core, index);
 }
 
 struct clk_hw *
@@ -406,8 +413,10 @@ clk_hw_get_parent_by_index(const struct clk_hw *hw, unsigned int index)
 	struct clk_core *parent;
 
 	parent = clk_core_get_parent_by_index(hw->core, index);
+	if (IS_ERR_OR_NULL(parent))
+		return ERR_CAST(parent);
 
-	return !parent ? NULL : parent->hw;
+	return parent->hw;
 }
 EXPORT_SYMBOL_GPL(clk_hw_get_parent_by_index);
 
@@ -528,7 +537,7 @@ int clk_mux_determine_rate_flags(struct clk_hw *hw,
 	num_parents = core->num_parents;
 	for (i = 0; i < num_parents; i++) {
 		parent = clk_core_get_parent_by_index(core, i);
-		if (!parent)
+		if (IS_ERR_OR_NULL(parent))
 			continue;
 
 		if (core->flags & CLK_SET_RATE_PARENT) {
