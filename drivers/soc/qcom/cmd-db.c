@@ -99,7 +99,7 @@ static bool cmd_db_magic_matches(const struct cmd_db_header *header)
 	return memcmp(magic, CMD_DB_MAGIC, ARRAY_SIZE(CMD_DB_MAGIC)) == 0;
 }
 
-static struct cmd_db_header *cmd_db_header;
+static const struct cmd_db_header *cmd_db_header;
 
 static inline const void *rsc_to_entry_header(const struct rsc_hdr *hdr)
 {
@@ -108,7 +108,7 @@ static inline const void *rsc_to_entry_header(const struct rsc_hdr *hdr)
 	return cmd_db_header->data + offset;
 }
 
-static inline void *
+static inline const void *
 rsc_offset(const struct rsc_hdr *hdr, const struct entry_header *ent)
 {
 	u16 offset = le16_to_cpu(hdr->data_offset);
