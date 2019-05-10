@@ -238,6 +238,7 @@ EXPORT_SYMBOL(cmd_db_read_slave_id);
 
 static int cmd_db_dev_probe(struct platform_device *pdev)
 {
+	struct resource *res;
 	struct reserved_mem *rmem;
 	int ret = 0;
 
@@ -247,12 +248,13 @@ static int cmd_db_dev_probe(struct platform_device *pdev)
 		return -EINVAL;
 	}
 
-	cmd_db_header = memremap(rmem->base, rmem->size, MEMREMAP_WB);
-	if (!cmd_db_header) {
-		ret = -ENOMEM;
-		cmd_db_header = NULL;
-		return ret;
-	}
+	res = devm_request_mem_region(&pdev->dev, rmem->base, rmem->size, "cmd-db");
+	if (!res)
+		return -EINVAL;
+
+	cmd_db_header = memremap(rmem->base, rmem->size, MEMREMAP_RO | MEMREMAP_WB);
+	if (!cmd_db_header)
+		return -ENOMEM;
 
 	if (!cmd_db_magic_matches(cmd_db_header)) {
 		dev_err(&pdev->dev, "Invalid Command DB Magic\n");
