@@ -80,16 +80,17 @@ void __iomem *__ioremap(phys_addr_t phys_addr, size_t size, pgprot_t prot)
 }
 EXPORT_SYMBOL(__ioremap);
 
-void __iounmap(volatile void __iomem *io_addr)
+void __iounmap(const volatile void __iomem *io_addr)
 {
-	unsigned long addr = (unsigned long)io_addr & PAGE_MASK;
+	const unsigned long addr = (const unsigned long)io_addr & PAGE_MASK;
+	const void *vaddr = (const void __force *)addr;
 
 	/*
 	 * We could get an address outside vmalloc range in case
 	 * of ioremap_cache() reusing a RAM mapping.
 	 */
-	if (is_vmalloc_addr((void *)addr))
-		vunmap((void *)addr);
+	if (is_vmalloc_addr(vaddr))
+		vunmap(vaddr);
 }
 EXPORT_SYMBOL(__iounmap);
 

@@ -48,7 +48,7 @@ struct vpd_section {
 	const char *name;
 	char *raw_name;                /* the string name_raw */
 	struct kobject *kobj;          /* vpd/name directory */
-	char *baseaddr;
+	const char *baseaddr;
 	struct bin_attribute bin_attr; /* vpd/name_raw bin_attribute */
 	struct list_head attribs;      /* key/value in vpd_attrib_info list */
 };
@@ -187,19 +187,19 @@ static int vpd_section_create_attribs(struct vpd_section *sec)
 	return 0;
 }
 
-static int vpd_section_init(const char *name, struct vpd_section *sec,
+static int vpd_section_init(struct device *dev, const char *name, struct vpd_section *sec,
 			    phys_addr_t physaddr, size_t size)
 {
 	int err;
 
-	sec->baseaddr = memremap(physaddr, size, MEMREMAP_WB);
-	if (!sec->baseaddr)
-		return -ENOMEM;
+	sec->baseaddr = devm_memremap(physaddr, size, MEMREMAP_RO | MEMREMAP_WB);
+	if (IS_ERR(sec->baseaddr))
+		return PTR_ERR(sec->baseaddr);
 
 	sec->name = name;
 
 	/* We want to export the raw partition with name ${name}_raw */
-	sec->raw_name = kasprintf(GFP_KERNEL, "%s_raw", name);
+	sec->raw_name = devm_kasprintf(GFP_KERNEL, "%s_raw", name);
 	if (!sec->raw_name) {
 		err = -ENOMEM;
 		goto err_memunmap;
@@ -252,11 +252,12 @@ static int vpd_section_destroy(struct vpd_section *sec)
 	return 0;
 }
 
-static int vpd_sections_init(phys_addr_t physaddr)
+static int vpd_sections_init(struct coreboot_device *cdev)
 {
 	struct vpd_cbmem __iomem *temp;
 	struct vpd_cbmem header;
 	int ret = 0;
+	phys_addr_t physaddr = cdev->cbmem_ref.cbmem_addr;
 
 	temp = memremap(physaddr, sizeof(struct vpd_cbmem), MEMREMAP_WB);
 	if (!temp)
@@ -269,7 +270,7 @@ static int vpd_sections_init(phys_addr_t physaddr)
 		return -ENODEV;
 
 	if (header.ro_size) {
-		ret = vpd_section_init("ro", &ro_vpd,
+		ret = vpd_section_init(&cdev->dev, "ro", &ro_vpd,
 				       physaddr + sizeof(struct vpd_cbmem),
 				       header.ro_size);
 		if (ret)
@@ -294,10 +295,9 @@ static int vpd_probe(struct coreboot_device *dev)
 	int ret;
 
 	vpd_kobj = kobject_create_and_add("vpd", firmware_kobj);
-	if (!vpd_kobj)
-		return -ENOMEM;
+	if (!vpd_kobj) return -ENOMEM;
 
-	ret = vpd_sections_init(dev->cbmem_ref.cbmem_addr);
+	ret = vpd_sections_init(dev);
 	if (ret) {
 		kobject_put(vpd_kobj);
 		return ret;

@@ -212,10 +212,9 @@ static int qcom_rmtfs_mem_probe(struct platform_device *pdev)
 	rmtfs_mem->dev.groups = qcom_rmtfs_mem_groups;
 	rmtfs_mem->dev.release = qcom_rmtfs_mem_release_device;
 
-	rmtfs_mem->base = devm_memremap(&rmtfs_mem->dev, rmtfs_mem->addr,
-					rmtfs_mem->size, MEMREMAP_WC);
+	rmtfs_mem->base = devm_memremap_reserved_mem(&pdev->dev,
+						     MEMREMAP_WC);
 	if (IS_ERR(rmtfs_mem->base)) {
-		dev_err(&pdev->dev, "failed to remap rmtfs_mem region\n");
 		ret = PTR_ERR(rmtfs_mem->base);
 		goto put_device;
 	}

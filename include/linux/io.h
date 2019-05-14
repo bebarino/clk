@@ -163,7 +163,7 @@ enum {
 };
 
 void *memremap(resource_size_t offset, size_t size, unsigned long flags);
-void memunmap(void *addr);
+void memunmap(const void *addr);
 
 /*
  * On x86 PAT systems we have memory tracking that keeps track of

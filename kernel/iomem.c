@@ -130,7 +130,7 @@ void *memremap(resource_size_t offset, size_t size, unsigned long flags)
 }
 EXPORT_SYMBOL(memremap);
 
-void memunmap(void *addr)
+void memunmap(const void *addr)
 {
 	if (is_vmalloc_addr(addr))
 		iounmap((void __iomem *) addr);
