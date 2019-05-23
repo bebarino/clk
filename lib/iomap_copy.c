@@ -89,3 +89,60 @@ void __attribute__((weak)) __iowrite64_copy(void __iomem *to,
 }
 
 EXPORT_SYMBOL_GPL(__iowrite64_copy);
+
+/**
+ * __iowrite32_fifo - copy data to 32-bit MMIO FIFO
+ * @to: destination, in MMIO space
+ * @from: source, in kernel space
+ * @count: number of bytes to copy
+ *
+ * Copy data from kernel space to an MMIO FIFO, in units of 32 bits at a
+ * time. A memory barrier is not performed afterwards.
+ */
+void __iowrite32_fifo(void __iomem *to, const void *from, size_t count)
+{
+	const u8 *src = from;
+	int i;
+
+	while (count) {
+		u32 dst = 0;
+		size_t left = min(sizeof(u32), count);
+
+		for (i = 0; i < left; i++) {
+			u8 val = *src++;
+			dst |= val << (i * 8);
+			count--;
+		}
+		__raw_writel(dst, to);
+	}
+}
+
+EXPORT_SYMBOL_GPL(__iowrite32_fifo);
+
+/**
+ * __ioread32_fifo - copy data from 32-bit MMIO FIFO
+ * @to: destination, in kernel space
+ * @from: source, in MMIO space
+ * @count: number of bytes to copy
+ *
+ * Copy data from an MMIO FIFO to kernel space, in units of 32 bits at a
+ * time. A memory barrier is not performed afterwards.
+ */
+void __ioread32_fifo(void *to, const void __iomem *from, size_t count)
+{
+	u8 *dst = to;
+	int i;
+
+	while (count) {
+		u32 src = __raw_readl(from);
+		size_t left = min(sizeof(u32), count);
+
+		for (i = 0; i < left; i++) {
+			*dst++ = src;
+			src >>= 8;
+			count--;
+		}
+	}
+}
+
+EXPORT_SYMBOL_GPL(__ioread32_fifo);
