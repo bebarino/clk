@@ -80,8 +80,8 @@ struct geni_i2c_dev {
 	struct i2c_adapter adap;
 	struct completion done;
 	struct i2c_msg *cur;
-	int cur_wr;
-	int cur_rd;
+	unsigned int cur_wr;
+	unsigned int cur_rd;
 	spinlock_t lock;
 	u32 clk_freq_out;
 	const struct geni_i2c_clk_fld *clk_fld;
@@ -202,15 +202,14 @@ static irqreturn_t geni_i2c_irq(int irq, void *dev)
 {
 	struct geni_i2c_dev *gi2c = dev;
 	void __iomem *base = gi2c->se.base;
-	int j, p;
 	u32 m_stat;
 	u32 rx_st;
 	u32 dm_tx_st;
 	u32 dm_rx_st;
 	u32 dma;
-	u32 val;
 	struct i2c_msg *cur;
 	unsigned long flags;
+	size_t count;
 
 	spin_lock_irqsave(&gi2c->lock, flags);
 	m_stat = readl_relaxed(base + SE_GENI_M_IRQ_STATUS);
@@ -248,36 +247,18 @@ static irqreturn_t geni_i2c_irq(int irq, void *dev)
 		   m_stat & (M_RX_FIFO_WATERMARK_EN | M_RX_FIFO_LAST_EN)) {
 		u32 rxcnt = rx_st & RX_FIFO_WC_MSK;
 
-		for (j = 0; j < rxcnt; j++) {
-			p = 0;
-			val = readl_relaxed(base + SE_GENI_RX_FIFOn);
-			while (gi2c->cur_rd < cur->len && p < sizeof(val)) {
-				cur->buf[gi2c->cur_rd++] = val & 0xff;
-				val >>= 8;
-				p++;
-			}
-			if (gi2c->cur_rd == cur->len)
-				break;
-		}
+		count = min(rxcnt, cur->len - gi2c->cur_rd);
+		__ioread32_fifo(cur->buf + gi2c->cur_rd,
+				base + SE_GENI_RX_FIFOn, count);
+		gi2c->cur_rd += count;
 	} else if (!(cur->flags & I2C_M_RD) &&
 		   m_stat & M_TX_FIFO_WATERMARK_EN) {
-		for (j = 0; j < gi2c->tx_wm; j++) {
-			u32 temp;
-
-			val = 0;
-			p = 0;
-			while (gi2c->cur_wr < cur->len && p < sizeof(val)) {
-				temp = cur->buf[gi2c->cur_wr++];
-				val |= temp << (p * 8);
-				p++;
-			}
-			writel_relaxed(val, base + SE_GENI_TX_FIFOn);
-			/* TX Complete, Disable the TX Watermark interrupt */
-			if (gi2c->cur_wr == cur->len) {
-				writel_relaxed(0, base + SE_GENI_TX_WATERMARK_REG);
-				break;
-			}
-		}
+		count = min(gi2c->tx_wm, cur->len - gi2c->cur_wr);
+		__iowrite32_fifo(base + SE_GENI_TX_FIFOn,
+				cur->buf + gi2c->cur_wr, count);
+		gi2c->cur_wr += count;
+		if (gi2c->cur_wr == cur->len)
+			writel_relaxed(0, base + SE_GENI_TX_WATERMARK_REG);
 	}
 
 	if (m_stat)
