@@ -413,24 +413,13 @@ static void geni_spi_handle_tx(struct spi_geni_master *mas)
 	unsigned int max_bytes;
 	const u8 *tx_buf;
 	unsigned int bytes_per_fifo_word = geni_byte_per_fifo_word(mas);
-	unsigned int i = 0;
 
 	max_bytes = (mas->tx_fifo_depth - mas->tx_wm) * bytes_per_fifo_word;
 	if (mas->tx_rem_bytes < max_bytes)
 		max_bytes = mas->tx_rem_bytes;
 
 	tx_buf = mas->cur_xfer->tx_buf + mas->cur_xfer->len - mas->tx_rem_bytes;
-	while (i < max_bytes) {
-		unsigned int j;
-		unsigned int bytes_to_write;
-		u32 fifo_word = 0;
-		u8 *fifo_byte = (u8 *)&fifo_word;
-
-		bytes_to_write = min(bytes_per_fifo_word, max_bytes - i);
-		for (j = 0; j < bytes_to_write; j++)
-			fifo_byte[j] = tx_buf[i++];
-		iowrite32_rep(se->base + SE_GENI_TX_FIFOn, &fifo_word, 1);
-	}
+	__iowrite32_fifo(se->base + SE_GENI_TX_FIFOn, tx_buf, max_bytes);
 	mas->tx_rem_bytes -= max_bytes;
 	if (!mas->tx_rem_bytes)
 		writel(0, se->base + SE_GENI_TX_WATERMARK_REG);
@@ -444,7 +433,6 @@ static void geni_spi_handle_rx(struct spi_geni_master *mas)
 	unsigned int rx_last_byte_valid;
 	u8 *rx_buf;
 	unsigned int bytes_per_fifo_word = geni_byte_per_fifo_word(mas);
-	unsigned int i = 0;
 
 	rx_fifo_status = readl(se->base + SE_GENI_RX_FIFO_STATUS);
 	rx_bytes = (rx_fifo_status & RX_FIFO_WC_MSK) * bytes_per_fifo_word;
@@ -458,17 +446,7 @@ static void geni_spi_handle_rx(struct spi_geni_master *mas)
 		rx_bytes = mas->rx_rem_bytes;
 
 	rx_buf = mas->cur_xfer->rx_buf + mas->cur_xfer->len - mas->rx_rem_bytes;
-	while (i < rx_bytes) {
-		u32 fifo_word = 0;
-		u8 *fifo_byte = (u8 *)&fifo_word;
-		unsigned int bytes_to_read;
-		unsigned int j;
-
-		bytes_to_read = min(bytes_per_fifo_word, rx_bytes - i);
-		ioread32_rep(se->base + SE_GENI_RX_FIFOn, &fifo_word, 1);
-		for (j = 0; j < bytes_to_read; j++)
-			rx_buf[i++] = fifo_byte[j];
-	}
+	__ioread32_fifo(rx_buf, se->base + SE_GENI_RX_FIFOn, rx_bytes);
 	mas->rx_rem_bytes -= rx_bytes;
 }
 
