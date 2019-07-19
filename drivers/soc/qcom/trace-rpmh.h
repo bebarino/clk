@@ -10,7 +10,6 @@
 #define TRACE_SYSTEM rpmh
 
 #include <linux/tracepoint.h>
-#include "rpmh-internal.h"
 
 TRACE_EVENT(rpmh_tx_done,
 
