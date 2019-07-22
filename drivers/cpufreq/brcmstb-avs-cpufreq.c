@@ -538,8 +538,6 @@ static int brcm_avs_prepare_init(struct platform_device *pdev)
 
 	host_irq = platform_get_irq_byname(pdev, BRCM_AVS_HOST_INTR);
 	if (host_irq < 0) {
-		dev_err(dev, "Couldn't find interrupt %s -- %d\n",
-			BRCM_AVS_HOST_INTR, host_irq);
 		ret = host_irq;
 		goto unmap_intr_base;
 	}
