@@ -168,11 +168,8 @@ static int bd70528_get_irqs(struct platform_device *pdev,
 
 	for (i = 0; i < ARRAY_SIZE(bd70528_chg_irqs); i++) {
 		irq = platform_get_irq_byname(pdev, bd70528_chg_irqs[i].n);
-		if (irq < 0) {
-			dev_err(&pdev->dev, "Bad IRQ information for %s (%d)\n",
-				bd70528_chg_irqs[i].n, irq);
+		if (irq < 0)
 			return irq;
-		}
 		ret = devm_request_threaded_irq(&pdev->dev, irq, NULL,
 						bd70528_chg_irqs[i].h,
 						IRQF_ONESHOT,
