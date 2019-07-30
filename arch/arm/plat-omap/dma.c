@@ -1367,7 +1367,6 @@ static int omap_system_dma_probe(struct platform_device *pdev)
 		strcpy(irq_name, "0");
 		dma_irq = platform_get_irq_byname(pdev, irq_name);
 		if (dma_irq < 0) {
-			dev_err(&pdev->dev, "failed: request IRQ %d", dma_irq);
 			ret = dma_irq;
 			goto exit_dma_lch_fail;
 		}
