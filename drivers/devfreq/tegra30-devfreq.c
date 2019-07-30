@@ -621,7 +621,6 @@ static int tegra_devfreq_probe(struct platform_device *pdev)
 	tegra->irq = platform_get_irq(pdev, 0);
 	if (tegra->irq < 0) {
 		err = tegra->irq;
-		dev_err(&pdev->dev, "Failed to get IRQ: %d\n", err);
 		return err;
 	}
 
