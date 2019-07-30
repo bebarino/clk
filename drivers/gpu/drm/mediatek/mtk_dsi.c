@@ -1157,10 +1157,8 @@ static int mtk_dsi_probe(struct platform_device *pdev)
 	}
 
 	irq_num = platform_get_irq(pdev, 0);
-	if (irq_num < 0) {
-		dev_err(&pdev->dev, "failed to request dsi irq resource\n");
+	if (irq_num < 0)
 		return -EPROBE_DEFER;
-	}
 
 	irq_set_status_flags(irq_num, IRQ_TYPE_LEVEL_LOW);
 	ret = devm_request_irq(&pdev->dev, irq_num, mtk_dsi_irq,
