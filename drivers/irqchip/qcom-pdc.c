@@ -111,12 +111,18 @@ static void qcom_pdc_gic_mask(struct irq_data *d)
 		return;
 
 	irq_chip_mask_parent(d);
+
+	if (irqd_is_suspended(d))
+		pdc_enable_intr(d, false);
 }
 
 static void qcom_pdc_gic_unmask(struct irq_data *d)
 {
 	if (d->hwirq == GPIO_NO_WAKE_IRQ)
 		return;
+
+	if (irqd_is_suspended(d))
+		pdc_enable_intr(d, true);
 
 	irq_chip_unmask_parent(d);
 }

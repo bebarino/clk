@@ -237,6 +237,7 @@ enum {
 	IRQD_CAN_RESERVE		= (1 << 26),
 	IRQD_MSI_NOMASK_QUIRK		= (1 << 27),
 	IRQD_HANDLE_ENFORCE_IRQCTX	= (1 << 28),
+	IRQD_SUSPENDED			= (1 << 29),
 };
 
 #define __irqd_to_state(d) ACCESS_PRIVATE((d)->common, state_use_accessors)
@@ -419,6 +420,11 @@ static inline void irqd_clr_msi_nomask_quirk(struct irq_data *d)
 static inline bool irqd_msi_nomask_quirk(struct irq_data *d)
 {
 	return __irqd_to_state(d) & IRQD_MSI_NOMASK_QUIRK;
+}
+
+static inline bool irqd_is_suspended(struct irq_data *d)
+{
+	return __irqd_to_state(d) & IRQD_SUSPENDED;
 }
 
 #undef __irqd_to_state

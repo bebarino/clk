@@ -85,6 +85,7 @@ static bool suspend_device_irq(struct irq_desc *desc)
 	}
 
 	desc->istate |= IRQS_SUSPENDED;
+	irqd_set(&desc->irq_data, IRQD_SUSPENDED);
 	__disable_irq(desc);
 
 	/*
@@ -138,6 +139,7 @@ EXPORT_SYMBOL_GPL(suspend_device_irqs);
 static void resume_irq(struct irq_desc *desc)
 {
 	irqd_clear(&desc->irq_data, IRQD_WAKEUP_ARMED);
+	irqd_clear(&desc->irq_data, IRQD_SUSPENDED);
 
 	if (desc->istate & IRQS_SUSPENDED)
 		goto resume;
