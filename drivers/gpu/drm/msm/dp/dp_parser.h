@@ -6,7 +6,10 @@
 #ifndef _DP_PARSER_H_
 #define _DP_PARSER_H_
 
-#include "pll/dp_pll.h"
+#include <linux/phy/phy.h>
+#include <linux/phy/phy-dp.h>
+
+#include "dpu_io_util.h"
 
 #define DP_LABEL "MDSS DP DISPLAY"
 #define AUX_CFG_LEN	10
@@ -59,12 +62,7 @@ struct dp_display_data {
  * @dp_aux: controller's aux mapped memory address
  * @dp_link: controller's link mapped memory address
  * @dp_p0: controller's p0 mapped memory address
- * @phy_io: phy's mapped memory address
- * @ln_tx0_io: USB-DP lane TX0's mapped memory address
- * @ln_tx1_io: USB-DP lane TX1's mapped memory address
  * @qfprom_io: qfprom's mapped memory address
- * @dp_pll_io: DP PLL mapped memory address
- * @usb3_dp_com: USB3 DP PHY combo mapped memory address
  */
 struct dp_io {
 	struct dss_io_data ctrl_io;
@@ -72,12 +70,9 @@ struct dp_io {
 	struct dss_io_data dp_aux;
 	struct dss_io_data dp_link;
 	struct dss_io_data dp_p0;
-	struct dss_io_data phy_io;
-	struct dss_io_data ln_tx0_io;
-	struct dss_io_data ln_tx1_io;
 	struct dss_io_data qfprom_io;
-	struct dss_io_data dp_pll_io;
-	struct dss_io_data usb3_dp_com;
+	struct phy *phy;
+	union phy_configure_opts phy_opts;
 };
 
 /**
@@ -95,38 +90,6 @@ struct dp_pinctrl {
 	struct pinctrl_state *state_suspend;
 };
 
-#define DP_ENUM_STR(x)	#x
-#define DP_AUX_CFG_MAX_VALUE_CNT 3
-/**
- * struct dp_aux_cfg - DP's AUX configuration settings
- *
- * @cfg_cnt: count of the configurable settings for the AUX register
- * @current_index: current index of the AUX config lut
- * @offset: register offset of the AUX config register
- * @lut: look up table for the AUX config values for this register
- */
-struct dp_aux_cfg {
-	u32 cfg_cnt;
-	u32 current_index;
-	u32 offset;
-	u32 lut[DP_AUX_CFG_MAX_VALUE_CNT];
-};
-
-/* PHY AUX config registers */
-enum dp_phy_aux_config_type {
-	PHY_AUX_CFG0,
-	PHY_AUX_CFG1,
-	PHY_AUX_CFG2,
-	PHY_AUX_CFG3,
-	PHY_AUX_CFG4,
-	PHY_AUX_CFG5,
-	PHY_AUX_CFG6,
-	PHY_AUX_CFG7,
-	PHY_AUX_CFG8,
-	PHY_AUX_CFG9,
-	PHY_AUX_CFG_MAX,
-};
-
 #define DP_DEV_REGULATOR_MAX	4
 
 /* Regulators for DP devices */
@@ -140,35 +103,6 @@ struct dp_regulator_cfg {
 	int num;
 	struct dp_reg_entry regs[DP_DEV_REGULATOR_MAX];
 };
-
-
-static inline char *dp_phy_aux_config_type_to_string(u32 cfg_type)
-{
-	switch (cfg_type) {
-	case PHY_AUX_CFG0:
-		return DP_ENUM_STR(PHY_AUX_CFG0);
-	case PHY_AUX_CFG1:
-		return DP_ENUM_STR(PHY_AUX_CFG1);
-	case PHY_AUX_CFG2:
-		return DP_ENUM_STR(PHY_AUX_CFG2);
-	case PHY_AUX_CFG3:
-		return DP_ENUM_STR(PHY_AUX_CFG3);
-	case PHY_AUX_CFG4:
-		return DP_ENUM_STR(PHY_AUX_CFG4);
-	case PHY_AUX_CFG5:
-		return DP_ENUM_STR(PHY_AUX_CFG5);
-	case PHY_AUX_CFG6:
-		return DP_ENUM_STR(PHY_AUX_CFG6);
-	case PHY_AUX_CFG7:
-		return DP_ENUM_STR(PHY_AUX_CFG7);
-	case PHY_AUX_CFG8:
-		return DP_ENUM_STR(PHY_AUX_CFG8);
-	case PHY_AUX_CFG9:
-		return DP_ENUM_STR(PHY_AUX_CFG9);
-	default:
-		return "unknown";
-	}
-}
 
 /**
  * struct dp_parser - DP parser's data exposed to clients
@@ -194,11 +128,8 @@ struct dp_parser {
 	bool combo_phy_en;
 	struct dp_io io;
 	struct dp_display_data disp_data;
-	struct msm_dp_pll *pll;
-	struct device *pll_dev;
 	const struct dp_regulator_cfg *regulator_cfg;
 	u8 l_map[4];
-	struct dp_aux_cfg aux_cfg[AUX_CFG_LEN];
 	u32 max_pclk_khz;
 	u32 max_dp_lanes;
 

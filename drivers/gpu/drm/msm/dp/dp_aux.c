@@ -4,6 +4,7 @@
  */
 
 #include <linux/delay.h>
+#include <drm/drm_print.h>
 
 #include "dp_reg.h"
 #include "dp_aux.h"
@@ -356,8 +357,7 @@ static ssize_t dp_aux_transfer(struct drm_dp_aux *drm_aux,
 		if (aux->native) {
 			aux->retry_cnt++;
 			if (!(aux->retry_cnt % retry_count))
-				dp_catalog_aux_update_cfg(aux->catalog,
-					aux->dp_aux.cfg, PHY_AUX_CFG1);
+				dp_catalog_aux_update_cfg(aux->catalog);
 			dp_catalog_aux_reset(aux->catalog);
 		}
 		goto unlock_exit;
@@ -383,14 +383,6 @@ unlock_exit:
 	aux->cmd_busy = false;
 	mutex_unlock(&aux->mutex);
 	return ret;
-}
-
-static void dp_aux_reset_phy_config_indices(struct dp_aux_cfg *aux_cfg)
-{
-	int i;
-
-	for (i = 0; i < PHY_AUX_CFG_MAX; i++)
-		aux_cfg[i].current_index = 0;
 }
 
 void dp_aux_isr(struct dp_aux *dp_aux)
@@ -421,24 +413,21 @@ void dp_aux_reconfig(struct dp_aux *dp_aux)
 
 	aux = container_of(dp_aux, struct dp_aux_private, dp_aux);
 
-	dp_catalog_aux_update_cfg(aux->catalog,
-			dp_aux->cfg, PHY_AUX_CFG1);
+	dp_catalog_aux_update_cfg(aux->catalog);
 	dp_catalog_aux_reset(aux->catalog);
 }
 
-void dp_aux_init(struct dp_aux *dp_aux, struct dp_aux_cfg *aux_cfg)
+void dp_aux_init(struct dp_aux *dp_aux)
 {
 	struct dp_aux_private *aux;
 
-	if (!dp_aux || !aux_cfg) {
+	if (!dp_aux) {
 		DRM_ERROR("invalid input\n");
 		return;
 	}
 
 	aux = container_of(dp_aux, struct dp_aux_private, dp_aux);
 
-	dp_aux_reset_phy_config_indices(aux_cfg);
-	dp_catalog_aux_setup(aux->catalog, aux_cfg);
 	dp_catalog_aux_reset(aux->catalog);
 	dp_catalog_aux_enable(aux->catalog, true);
 	aux->retry_cnt = 0;
@@ -487,13 +476,12 @@ void dp_aux_unregister(struct dp_aux *dp_aux)
 	drm_dp_aux_unregister(&aux->drm_aux);
 }
 
-struct dp_aux *dp_aux_get(struct device *dev, struct dp_catalog *catalog,
-			  struct dp_aux_cfg *aux_cfg)
+struct dp_aux *dp_aux_get(struct device *dev, struct dp_catalog *catalog)
 {
 	struct dp_aux_private *aux;
 	struct dp_aux *dp_aux;
 
-	if (!catalog || !aux_cfg) {
+	if (!catalog) {
 		DRM_ERROR("invalid input\n");
 		return ERR_PTR(-ENODEV);
 	}
@@ -509,7 +497,6 @@ struct dp_aux *dp_aux_get(struct device *dev, struct dp_catalog *catalog,
 
 	aux->dev = dev;
 	aux->catalog = catalog;
-	aux->dp_aux.cfg = aux_cfg;
 	dp_aux = &aux->dp_aux;
 	aux->retry_cnt = 0;
 

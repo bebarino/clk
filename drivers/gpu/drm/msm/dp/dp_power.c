@@ -9,6 +9,7 @@
 #include <linux/regulator/consumer.h>
 #include <linux/of_gpio.h>
 #include "dp_power.h"
+#include "msm_drv.h"
 
 struct dp_power_private {
 	struct dp_parser *parser;
@@ -123,16 +124,6 @@ static int dp_power_clk_init(struct dp_power_private *power)
 
 	core = &power->parser->mp[DP_CORE_PM];
 	ctrl = &power->parser->mp[DP_CTRL_PM];
-
-	if (power->parser->pll && power->parser->pll->get_provider) {
-		rc = power->parser->pll->get_provider(power->parser->pll,
-				&power->link_provider, &power->pixel_provider);
-		if (rc) {
-			DRM_ERROR("%s:provider failed,don't set parent\n",
-					__func__);
-			return 0;
-		}
-	}
 
 	rc = msm_dss_get_clk(dev, core->clk_config, core->num_clk);
 	if (rc) {
@@ -388,73 +379,6 @@ void dp_power_client_deinit(struct dp_power *dp_power)
 	dp_power_clk_deinit(power);
 	pm_runtime_disable(&power->pdev->dev);
 
-}
-
-int dp_power_set_link_clk_parent(struct dp_power *dp_power)
-{
-	int rc = 0;
-	struct dp_power_private *power;
-	u32 num;
-	struct dss_clk *cfg;
-	char *name = "ctrl_link_clk";
-
-	if (!dp_power) {
-		DRM_ERROR("invalid power data\n");
-		rc = -EINVAL;
-		goto exit;
-	}
-
-	power = container_of(dp_power, struct dp_power_private, dp_power);
-
-	num = power->parser->mp[DP_CTRL_PM].num_clk;
-	cfg = power->parser->mp[DP_CTRL_PM].clk_config;
-
-	while (num && strcmp(cfg->clk_name, name)) {
-		num--;
-		cfg++;
-	}
-
-	if (num && power->link_provider) {
-		power->link_clk_src = clk_get_parent(cfg->clk);
-			if (power->link_clk_src) {
-				clk_set_parent(power->link_clk_src,
-						power->link_provider);
-				DRM_DEBUG_DP("%s: is the parent of clk=%s\n",
-					__clk_get_name(power->link_provider),
-					__clk_get_name(power->link_clk_src));
-			} else {
-				DRM_ERROR("couldn't get parent for clk=%s\n",
-					name);
-				rc = -EINVAL;
-			}
-	} else {
-		DRM_ERROR("%s clock could not be set parent\n", name);
-		rc = -EINVAL;
-	}
-exit:
-	return rc;
-}
-
-int dp_power_set_pixel_clk_parent(struct dp_power *dp_power)
-{
-	int rc = 0;
-	struct dp_power_private *power;
-
-	power = container_of(dp_power, struct dp_power_private, dp_power);
-
-	if (power->pixel_clk_rcg && power->pixel_provider) {
-		rc = clk_set_parent(power->pixel_clk_rcg,
-				power->pixel_provider);
-		if (rc) {
-			DRM_ERROR("failed to set parent clk src, %d\n", rc);
-			return rc;
-		}
-		DRM_DEBUG_DP("%s: is the parent of clk=%s\n",
-				__clk_get_name(power->pixel_provider),
-				__clk_get_name(power->pixel_clk_rcg));
-	}
-
-	return 0;
 }
 
 int dp_power_init(struct dp_power *dp_power, bool flip)

@@ -7,6 +7,7 @@
 
 #include <drm/drm_connector.h>
 #include <drm/drm_edid.h>
+#include <drm/drm_print.h>
 
 #define DP_MAX_DS_PORT_COUNT 1
 

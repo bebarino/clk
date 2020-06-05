@@ -4,6 +4,9 @@
  */
 
 #include <linux/of_gpio.h>
+#include <linux/phy/phy.h>
+
+#include <drm/drm_print.h>
 
 #include "dp_parser.h"
 
@@ -55,11 +58,6 @@ static void dp_parser_unmap_io_resources(struct dp_parser *parser)
 	msm_dss_iounmap(&io->dp_aux);
 	msm_dss_iounmap(&io->dp_link);
 	msm_dss_iounmap(&io->dp_p0);
-	msm_dss_iounmap(&io->phy_io);
-	msm_dss_iounmap(&io->ln_tx0_io);
-	msm_dss_iounmap(&io->ln_tx0_io);
-	msm_dss_iounmap(&io->dp_pll_io);
-	msm_dss_iounmap(&io->usb3_dp_com);
 	msm_dss_iounmap(&io->qfprom_io);
 }
 
@@ -101,116 +99,19 @@ static int dp_parser_ctrl_res(struct dp_parser *parser)
 		goto err;
 	}
 
-	rc = msm_dss_ioremap_byname(pdev, &io->phy_io, "dp_phy");
-	if (rc) {
-		DRM_ERROR("unable to remap dp PHY resources, rc=%d\n", rc);
-		goto err;
-	}
-
-	rc = msm_dss_ioremap_byname(pdev, &io->ln_tx0_io, "dp_ln_tx0");
-	if (rc) {
-		DRM_ERROR("unable to remap dp TX0 resources, rc=%d\n", rc);
-		goto err;
-	}
-
-	rc = msm_dss_ioremap_byname(pdev, &io->ln_tx1_io, "dp_ln_tx1");
-	if (rc) {
-		DRM_ERROR("unable to remap dp TX1 resources, rc=%d\n", rc);
-		goto err;
-	}
-
-	rc = msm_dss_ioremap_byname(pdev, &io->dp_pll_io, "dp_pll");
-	if (rc) {
-		DRM_ERROR("unable to remap DP PLL resources, rc=%d\n", rc);
-		goto err;
-	}
-
-	rc = msm_dss_ioremap_byname(pdev, &io->usb3_dp_com, "usb3_dp_com");
-	if (rc) {
-		DRM_ERROR("unable to remap USB3 DP com resources, rc=%d\n", rc);
-		goto err;
-	}
-
 	if (msm_dss_ioremap_byname(pdev, &io->qfprom_io, "qfprom_physical"))
 		pr_warn("unable to remap dp qfprom resources\n");
+
+	io->phy = devm_phy_get(&pdev->dev, "dp");
+	if (IS_ERR(io->phy)) {
+		rc = PTR_ERR(io->phy);
+		goto err;
+	}
 
 	return 0;
 err:
 	dp_parser_unmap_io_resources(parser);
 	return rc;
-}
-
-static const char *dp_get_phy_aux_config_property(u32 cfg_type)
-{
-	switch (cfg_type) {
-	case PHY_AUX_CFG0:
-		return "aux-cfg0-settings";
-	case PHY_AUX_CFG1:
-		return "aux-cfg1-settings";
-	case PHY_AUX_CFG2:
-		return "aux-cfg2-settings";
-	case PHY_AUX_CFG3:
-		return "aux-cfg3-settings";
-	case PHY_AUX_CFG4:
-		return "aux-cfg4-settings";
-	case PHY_AUX_CFG5:
-		return "aux-cfg5-settings";
-	case PHY_AUX_CFG6:
-		return "aux-cfg6-settings";
-	case PHY_AUX_CFG7:
-		return "aux-cfg7-settings";
-	case PHY_AUX_CFG8:
-		return "aux-cfg8-settings";
-	case PHY_AUX_CFG9:
-		return "aux-cfg9-settings";
-	default:
-		return "unknown";
-	}
-}
-
-static int dp_parser_aux(struct dp_parser *parser)
-{
-	struct device_node *of_node = parser->pdev->dev.of_node;
-	int len = 0, i = 0, j = 0, config_count = 0;
-	const char *data;
-
-	for (i = 0; i < PHY_AUX_CFG_MAX; i++) {
-		const char *property = dp_get_phy_aux_config_property(i);
-
-		data = of_get_property(of_node, property, &len);
-		if (!data) {
-			DRM_ERROR("Unable to read %s\n", property);
-			goto error;
-		}
-
-		config_count = len - 1;
-		if (config_count < 1 || /* minimum config count = 1 */
-			config_count > DP_AUX_CFG_MAX_VALUE_CNT) {
-			DRM_ERROR("Invalid config count (%d) configs for %s\n",
-					config_count, property);
-			goto error;
-		}
-
-		parser->aux_cfg[i].offset = data[0];
-		parser->aux_cfg[i].cfg_cnt = config_count;
-		DRM_DEBUG_DP("%s offset=0x%x, cfg_cnt=%d\n",
-				property,
-				parser->aux_cfg[i].offset,
-				parser->aux_cfg[i].cfg_cnt);
-		for (j = 1; j < len; j++) {
-			parser->aux_cfg[i].lut[j - 1] = data[j];
-			DRM_DEBUG_DP("%s lut[%d]=0x%x\n",
-					property,
-					i,
-					parser->aux_cfg[i].lut[j - 1]);
-		}
-	}
-		return 0;
-
-error:
-	memset(parser->aux_cfg, 0, sizeof(parser->aux_cfg));
-
-	return -EINVAL;
 }
 
 static int dp_parser_misc(struct dp_parser *parser)
@@ -257,7 +158,7 @@ static int dp_parser_pinctrl(struct dp_parser *parser)
 	pinctrl->state_active = pinctrl_lookup_state(pinctrl->pin,
 					"mdss_dp_active");
 	if (IS_ERR(pinctrl->state_active)) {
-		DRM_ERROR("failed to get pinctrl active state, %d\n",
+		DRM_ERROR("failed to get pinctrl active state, %ld\n",
 			PTR_ERR(pinctrl->state_active));
 		return -EINVAL;
 	}
@@ -265,7 +166,7 @@ static int dp_parser_pinctrl(struct dp_parser *parser)
 	pinctrl->state_suspend = pinctrl_lookup_state(pinctrl->pin,
 					"mdss_dp_sleep");
 	if (IS_ERR(pinctrl->state_suspend)) {
-		DRM_ERROR("failed to get pinctrl suspend state, %d\n",
+		DRM_ERROR("failed to get pinctrl suspend state, %ld\n",
 			PTR_ERR(pinctrl->state_suspend));
 		return -EINVAL;
 	}
@@ -448,10 +349,6 @@ static int dp_parser_parse(struct dp_parser *parser)
 	parser->combo_phy_en = true;
 
 	rc = dp_parser_ctrl_res(parser);
-	if (rc)
-		return rc;
-
-	rc = dp_parser_aux(parser);
 	if (rc)
 		return rc;
 
