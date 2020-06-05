@@ -18,18 +18,16 @@
 
 struct dp_aux {
 	struct drm_dp_aux *drm_aux;
-	struct dp_aux_cfg *cfg;
 };
 
 int dp_aux_register(struct dp_aux *aux);
 void dp_aux_unregister(struct dp_aux *aux);
 void dp_aux_isr(struct dp_aux *aux);
-void dp_aux_init(struct dp_aux *aux, struct dp_aux_cfg *aux_cfg);
+void dp_aux_init(struct dp_aux *aux);
 void dp_aux_deinit(struct dp_aux *aux);
 void dp_aux_reconfig(struct dp_aux *aux);
 
-struct dp_aux *dp_aux_get(struct device *dev, struct dp_catalog *catalog,
-			  struct dp_aux_cfg *aux_cfg);
+struct dp_aux *dp_aux_get(struct device *dev, struct dp_catalog *catalog);
 void dp_aux_put(struct dp_aux *aux);
 
 #endif /*__DP_AUX_H_*/
