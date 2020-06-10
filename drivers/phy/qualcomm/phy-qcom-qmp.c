@@ -2717,6 +2717,8 @@ static int qcom_qmp_phy_serdes_init(struct qmp_phy *qphy)
 
 static void qcom_qmp_phy_dp_aux_init(struct qmp_phy *qphy)
 {
+	pr_info("%s", __func__);
+
 	writel(DP_PHY_PD_CTL_PWRDN | DP_PHY_PD_CTL_AUX_PWRDN |
 	       DP_PHY_PD_CTL_PLL_PWRDN | DP_PHY_PD_CTL_DP_CLAMP_EN,
 	       qphy->pcs + QSERDES_V3_DP_PHY_PD_CTL);
@@ -2742,6 +2744,7 @@ static void qcom_qmp_phy_dp_aux_init(struct qmp_phy *qphy)
 	       QSERDES_V3_COM_CLKBUF_RX_DRIVE_L,
 	       qphy->serdes + QSERDES_V3_COM_BIAS_EN_CLKBUFLR_EN);
 
+	pr_info("It is %#x\n", readl(qphy->pcs + QSERDES_V3_DP_PHY_PD_CTL));
 	writel(0x00, qphy->pcs + QSERDES_V3_DP_PHY_AUX_CFG0);
 	writel(0x13, qphy->pcs + QSERDES_V3_DP_PHY_AUX_CFG1);
 	writel(0x24, qphy->pcs + QSERDES_V3_DP_PHY_AUX_CFG2);
@@ -2754,10 +2757,23 @@ static void qcom_qmp_phy_dp_aux_init(struct qmp_phy *qphy)
 	writel(0x03, qphy->pcs + QSERDES_V3_DP_PHY_AUX_CFG9);
 	qphy->dp_aux_cfg = 0;
 
+	pr_info("Aux are %#x\n", readl(qphy->pcs + QSERDES_V3_DP_PHY_AUX_CFG0));
+	pr_info("Aux are %#x\n", readl(qphy->pcs + QSERDES_V3_DP_PHY_AUX_CFG1));
+	pr_info("Aux are %#x\n", readl(qphy->pcs + QSERDES_V3_DP_PHY_AUX_CFG2));
+	pr_info("Aux are %#x\n", readl(qphy->pcs + QSERDES_V3_DP_PHY_AUX_CFG3));
+	pr_info("Aux are %#x\n", readl(qphy->pcs + QSERDES_V3_DP_PHY_AUX_CFG4));
+	pr_info("Aux are %#x\n", readl(qphy->pcs + QSERDES_V3_DP_PHY_AUX_CFG5));
+	pr_info("Aux are %#x\n", readl(qphy->pcs + QSERDES_V3_DP_PHY_AUX_CFG6));
+	pr_info("Aux are %#x\n", readl(qphy->pcs + QSERDES_V3_DP_PHY_AUX_CFG7));
+	pr_info("Aux are %#x\n", readl(qphy->pcs + QSERDES_V3_DP_PHY_AUX_CFG8));
+	pr_info("Aux are %#x\n", readl(qphy->pcs + QSERDES_V3_DP_PHY_AUX_CFG9));
+
 	writel(PHY_AUX_STOP_ERR_MASK | PHY_AUX_DEC_ERR_MASK |
 	       PHY_AUX_SYNC_ERR_MASK | PHY_AUX_ALIGN_ERR_MASK |
 	       PHY_AUX_REQ_ERR_MASK,
 	       qphy->pcs + QSERDES_V3_DP_PHY_AUX_INTERRUPT_MASK);
+
+	pr_info("It is again %#x\n", readl(qphy->pcs + QSERDES_V3_DP_PHY_PD_CTL));
 }
 
 static const u8 vm_pre_emphasis[4][4] = {
@@ -2851,6 +2867,7 @@ static int qcom_qmp_dp_phy_configure(struct phy *phy, union phy_configure_opts *
 {
 	const struct phy_configure_opts_dp *dp_opts = &opts->dp;
 	struct qmp_phy *qphy = phy_get_drvdata(phy);
+	pr_info("%s lanes %d rate %d %s\n", __func__, dp_opts->lanes, dp_opts->link_rate, dp_opts->set_voltages ? "vx update" : "");
 
 	memcpy(&qphy->dp_opts, dp_opts, sizeof(*dp_opts));
 	if (qphy->dp_opts.set_voltages) {
@@ -2985,6 +3002,8 @@ static int qcom_qmp_phy_com_init(struct qmp_phy *qphy)
 	void __iomem *dp_com = qmp->dp_com;
 	int ret, i;
 
+	dev_info(qmp->dev, "%s", __func__);
+
 	mutex_lock(&qmp->phy_mutex);
 	if (qmp->init_count++) {
 		mutex_unlock(&qmp->phy_mutex);
@@ -3080,6 +3099,7 @@ static int qcom_qmp_phy_com_exit(struct qmp_phy *qphy)
 	void __iomem *serdes = qphy->serdes;
 	int i = cfg->num_resets;
 
+	pr_info("%s", __func__);
 	mutex_lock(&qmp->phy_mutex);
 	if (--qmp->init_count) {
 		mutex_unlock(&qmp->phy_mutex);
