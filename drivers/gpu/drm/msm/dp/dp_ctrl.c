@@ -1296,7 +1296,7 @@ static void dp_ctrl_set_clock_rate(struct dp_ctrl_private *ctrl,
 		cfg++;
 	}
 
-	DRM_DEBUG_DP("setting rate=%d on clk=%s\n", rate, name);
+	DRM_INFO("setting rate=%lu on clk=%s\n", rate, name);
 
 	if (num)
 		cfg->rate = rate;
