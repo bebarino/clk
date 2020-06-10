@@ -2245,6 +2245,8 @@ static int qcom_qmp_phy_serdes_init(struct qmp_phy *qphy)
 
 static void qcom_qmp_phy_dp_aux_init(struct qmp_phy *qphy)
 {
+	pr_info("%s", __func__);
+
 	writel(DP_PHY_PD_CTL_PWRDN | DP_PHY_PD_CTL_AUX_PWRDN |
 	       DP_PHY_PD_CTL_PLL_PWRDN | DP_PHY_PD_CTL_DP_CLAMP_EN,
 	       qphy->pcs + QSERDES_V3_DP_PHY_PD_CTL);
@@ -2270,6 +2272,7 @@ static void qcom_qmp_phy_dp_aux_init(struct qmp_phy *qphy)
 	       QSERDES_V3_COM_CLKBUF_RX_DRIVE_L,
 	       qphy->serdes + QSERDES_V3_COM_BIAS_EN_CLKBUFLR_EN);
 
+	pr_info("It is %#x\n", readl(qphy->pcs + QSERDES_V3_DP_PHY_PD_CTL));
 	writel(0x00, qphy->pcs + QSERDES_V3_DP_PHY_AUX_CFG0);
 	writel(0x13, qphy->pcs + QSERDES_V3_DP_PHY_AUX_CFG1);
 	writel(0x24, qphy->pcs + QSERDES_V3_DP_PHY_AUX_CFG2);
@@ -2281,10 +2284,23 @@ static void qcom_qmp_phy_dp_aux_init(struct qmp_phy *qphy)
 	writel(0xbb, qphy->pcs + QSERDES_V3_DP_PHY_AUX_CFG8);
 	writel(0x03, qphy->pcs + QSERDES_V3_DP_PHY_AUX_CFG9);
 
+	pr_info("Aux are %#x\n", readl(qphy->pcs + QSERDES_V3_DP_PHY_AUX_CFG0));
+	pr_info("Aux are %#x\n", readl(qphy->pcs + QSERDES_V3_DP_PHY_AUX_CFG1));
+	pr_info("Aux are %#x\n", readl(qphy->pcs + QSERDES_V3_DP_PHY_AUX_CFG2));
+	pr_info("Aux are %#x\n", readl(qphy->pcs + QSERDES_V3_DP_PHY_AUX_CFG3));
+	pr_info("Aux are %#x\n", readl(qphy->pcs + QSERDES_V3_DP_PHY_AUX_CFG4));
+	pr_info("Aux are %#x\n", readl(qphy->pcs + QSERDES_V3_DP_PHY_AUX_CFG5));
+	pr_info("Aux are %#x\n", readl(qphy->pcs + QSERDES_V3_DP_PHY_AUX_CFG6));
+	pr_info("Aux are %#x\n", readl(qphy->pcs + QSERDES_V3_DP_PHY_AUX_CFG7));
+	pr_info("Aux are %#x\n", readl(qphy->pcs + QSERDES_V3_DP_PHY_AUX_CFG8));
+	pr_info("Aux are %#x\n", readl(qphy->pcs + QSERDES_V3_DP_PHY_AUX_CFG9));
+
 	writel(PHY_AUX_STOP_ERR_MASK | PHY_AUX_DEC_ERR_MASK |
 	       PHY_AUX_SYNC_ERR_MASK | PHY_AUX_ALIGN_ERR_MASK |
 	       PHY_AUX_REQ_ERR_MASK,
 	       qphy->pcs + QSERDES_V3_DP_PHY_AUX_INTERRUPT_MASK);
+
+	pr_info("It is again %#x\n", readl(qphy->pcs + QSERDES_V3_DP_PHY_PD_CTL));
 }
 
 static int qcom_qmp_phy_com_init(struct qmp_phy *qphy)
@@ -2425,6 +2441,8 @@ static int qcom_qmp_dp_phy_init(struct phy *phy)
 	struct qcom_qmp *qmp = qphy->qmp;
 	const struct qmp_phy_cfg *cfg = qphy->cfg;
 	int ret;
+	dev_info(qmp->dev, "%s", __func__);
+
 	dev_vdbg(qmp->dev, "Initializing QMP phy\n");
 
 	if (cfg->no_pcs_sw_reset) {
@@ -2557,6 +2575,7 @@ static int qcom_qmp_dp_phy_configure(struct phy *phy, union phy_configure_opts *
 {
 	const struct phy_configure_opts_dp *dp_opts = &opts->dp;
 	struct qmp_phy *qphy = phy_get_drvdata(phy);
+	pr_info("%s lanes %d rate %d %s\n", __func__, dp_opts->lanes, dp_opts->link_rate, dp_opts->set_voltages ? "vx update" : "");
 
 	memcpy(&qphy->dp_opts, dp_opts, sizeof(*dp_opts));
 	if (qphy->dp_opts.set_voltages) {
@@ -2599,9 +2618,11 @@ static int qcom_qmp_phy_configure_dp_phy(struct qmp_phy *qphy)
 	/* does this do anything? link_clock_sel_mux isn't set (bit 5) */
 	writel(0x5c, qphy->pcs + QSERDES_V3_DP_PHY_MODE);
 
+	/* TX Lane configuration */
 	writel(0x05, qphy->pcs + QSERDES_V3_DP_PHY_TX0_TX1_LANE_CTL);
 	writel(0x05, qphy->pcs + QSERDES_V3_DP_PHY_TX2_TX3_LANE_CTL);
 
+	/* dependent on the vco frequency */
 	switch (dp_opts->link_rate) {
 	case 1620:
 		phy_vco_div = 0x1;
@@ -2678,6 +2699,7 @@ static int qcom_qmp_dp_phy_power_on(struct phy *phy)
 	void __iomem *status;
 	unsigned int mask, val, ready;
 	int ret;
+	dev_info(qmp->dev, "%s", __func__);
 
 	qcom_qmp_phy_serdes_init(qphy);
 
@@ -2779,6 +2801,8 @@ static int qcom_qmp_dp_phy_calibrate(struct phy *phy)
 	const u8 cfg1_settings[] = { 0x13, 0x23, 0x1d };
 	u8 val;
 
+	pr_info("%s", __func__);
+
 	qphy->dp_aux_cfg++;
 	qphy->dp_aux_cfg %= ARRAY_SIZE(cfg1_settings);
 	val = cfg1_settings[qphy->dp_aux_cfg];
@@ -2792,6 +2816,8 @@ static int qcom_qmp_dp_phy_power_off(struct phy *phy)
 {
 	struct qmp_phy *qphy = phy_get_drvdata(phy);
 	const struct qmp_phy_cfg *cfg = qphy->cfg;
+
+	pr_info("%s", __func__);
 
 	clk_disable_unprepare(qphy->pipe_clk);
 
@@ -2817,6 +2843,8 @@ static int qcom_qmp_dp_phy_exit(struct phy *phy)
 {
 	struct qmp_phy *qphy = phy_get_drvdata(phy);
 	const struct qmp_phy_cfg *cfg = qphy->cfg;
+
+	pr_info("%s", __func__);
 
 	if (cfg->has_lane_rst)
 		reset_control_assert(qphy->lane_rst);
