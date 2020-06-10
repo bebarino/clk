@@ -100,6 +100,7 @@ struct dp_catalog_private {
 static inline u32 dp_read_aux(struct dp_catalog_private *catalog, u32 offset)
 {
 	offset += MSM_DP_CONTROLLER_AUX_OFFSET;
+	//pr_info("%s %#x and %#x\n", __func__, offset, readl_relaxed(catalog->io->dp_controller.base + offset));
 	return readl_relaxed(catalog->io->dp_controller.base + offset);
 }
 
@@ -107,6 +108,7 @@ static inline void dp_write_aux(struct dp_catalog_private *catalog,
 			       u32 offset, u32 data)
 {
 	offset += MSM_DP_CONTROLLER_AUX_OFFSET;
+	//pr_info("%s %#x %#x and %#x\n", __func__, offset, data, catalog->io->dp_controller.base + offset));
 	/*
 	 * To make sure aux reg writes happens before any other operation,
 	 * this function uses writel() instread of writel_relaxed()
@@ -117,6 +119,7 @@ static inline void dp_write_aux(struct dp_catalog_private *catalog,
 static inline u32 dp_read_ahb(struct dp_catalog_private *catalog, u32 offset)
 {
 	offset += MSM_DP_CONTROLLER_AHB_OFFSET;
+	//pr_info("%s %#x and %#x\n", __func__, offset, readl_relaxed(catalog->io->dp_controller.base + offset));
 	return readl_relaxed(catalog->io->dp_controller.base + offset);
 }
 
@@ -124,6 +127,7 @@ static inline void dp_write_ahb(struct dp_catalog_private *catalog,
 			       u32 offset, u32 data)
 {
 	offset += MSM_DP_CONTROLLER_AHB_OFFSET;
+	//pr_info("%s %#x %#x and %#x\n", __func__, offset, data, readl(catalog->io->dp_controller.base + offset));
 	/*
 	 * To make sure phy reg writes happens before any other operation,
 	 * this function uses writel() instread of writel_relaxed()
@@ -135,6 +139,7 @@ static inline void dp_write_p0(struct dp_catalog_private *catalog,
 			       u32 offset, u32 data)
 {
 	offset += MSM_DP_CONTROLLER_P0_OFFSET;
+	//pr_info("%s %#x %#x\n", __func__, offset, data);
 	/*
 	 * To make sure interface reg writes happens before any other operation,
 	 * this function uses writel() instread of writel_relaxed()
@@ -146,6 +151,7 @@ static inline u32 dp_read_p0(struct dp_catalog_private *catalog,
 			       u32 offset)
 {
 	offset += MSM_DP_CONTROLLER_P0_OFFSET;
+	//pr_info("%s %#x\n", __func__, offset);
 	/*
 	 * To make sure interface reg writes happens before any other operation,
 	 * this function uses writel() instread of writel_relaxed()
@@ -156,6 +162,7 @@ static inline u32 dp_read_p0(struct dp_catalog_private *catalog,
 static inline u32 dp_read_link(struct dp_catalog_private *catalog, u32 offset)
 {
 	offset += MSM_DP_CONTROLLER_LINK_OFFSET;
+	//pr_info("%s %#x\n", __func__, offset);
 	return readl_relaxed(catalog->io->dp_controller.base + offset);
 }
 
@@ -163,6 +170,7 @@ static inline void dp_write_link(struct dp_catalog_private *catalog,
 			       u32 offset, u32 data)
 {
 	offset += MSM_DP_CONTROLLER_LINK_OFFSET;
+	//pr_info("%s %#x %#x\n", __func__, offset, data);
 	/*
 	 * To make sure link reg writes happens before any other operation,
 	 * this function uses writel() instread of writel_relaxed()
@@ -536,7 +544,7 @@ bool dp_catalog_ctrl_mainlink_ready(struct dp_catalog *dp_catalog)
 		DRM_ERROR("mainlink not ready\n");
 		return false;
 	}
-
+	pr_info("DP main link ready\n");
 	return true;
 }
 
