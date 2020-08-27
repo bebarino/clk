@@ -188,9 +188,9 @@ static void dp_aux_native_handler(struct dp_aux_private *aux)
 		aux->aux_error_num = DP_AUX_ERR_ADDR;
 	else if (isr & DP_INTR_TIMEOUT)
 		aux->aux_error_num = DP_AUX_ERR_TOUT;
-	if (isr & DP_INTR_NACK_DEFER)
+	else if (isr & DP_INTR_NACK_DEFER)
 		aux->aux_error_num = DP_AUX_ERR_NACK;
-	if (isr & DP_INTR_AUX_ERROR) {
+	else if (isr & DP_INTR_AUX_ERROR) {
 		aux->aux_error_num = DP_AUX_ERR_PHY;
 		dp_catalog_aux_clear_hw_interrupts(aux->catalog);
 	}
@@ -384,6 +384,7 @@ static ssize_t dp_aux_transfer(struct drm_dp_aux *dp_aux,
 					PHY_AUX_CFG1);
 			dp_catalog_aux_reset(aux->catalog);
 		}
+		usleep_range(400, 500); /* at least 400us to next try */
 		goto unlock_exit;
 	}
 
