@@ -74,6 +74,10 @@ static const struct mfd_cell cros_ec_cec_cells[] = {
 	{ .name = "cros-ec-cec", },
 };
 
+static const struct mfd_cell cros_ec_lightbar_cells[] = {
+	{ .name = "cros-ec-lightbar", },
+};
+
 static const struct mfd_cell cros_ec_rtc_cells[] = {
 	{ .name = "cros-ec-rtc", },
 };
@@ -112,7 +116,6 @@ static const struct cros_feature_to_cells cros_subdevices[] = {
 static const struct mfd_cell cros_ec_platform_cells[] = {
 	{ .name = "cros-ec-chardev", },
 	{ .name = "cros-ec-debugfs", },
-	{ .name = "cros-ec-lightbar", },
 	{ .name = "cros-ec-sysfs", },
 };
 
@@ -204,6 +207,17 @@ static int ec_device_probe(struct platform_device *pdev)
 					cros_subdevices[i].mfd_cells->name,
 					retval);
 		}
+	}
+
+	if (!strcmp(ec_platform->ec_name, CROS_EC_DEV_NAME) &&
+	    !cros_ec_get_lightbar_version(ec, NULL, NULL)) {
+		retval = mfd_add_hotplug_devices(ec->dev,
+				cros_ec_lightbar_cells,
+				ARRAY_SIZE(cros_ec_lightbar_cells));
+		if (retval)
+			dev_err(ec->dev,
+				"failed to add lightbar	device: %d\n",
+				retval);
 	}
 
 	/*

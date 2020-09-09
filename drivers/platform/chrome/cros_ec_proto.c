@@ -922,3 +922,87 @@ int cros_ec_get_sensor_count(struct cros_ec_dev *ec)
 	return sensor_count;
 }
 EXPORT_SYMBOL_GPL(cros_ec_get_sensor_count);
+
+struct cros_ec_command *cros_ec_alloc_lightbar_cmd_msg(struct cros_ec_dev *ec)
+{
+	struct cros_ec_command *msg;
+	int len;
+
+	len = max(sizeof(struct ec_params_lightbar),
+		  sizeof(struct ec_response_lightbar));
+
+	msg = kmalloc(sizeof(*msg) + len, GFP_KERNEL);
+	if (!msg)
+		return NULL;
+
+	msg->version = 0;
+	msg->command = EC_CMD_LIGHTBAR_CMD + ec->cmd_offset;
+	msg->outsize = sizeof(struct ec_params_lightbar);
+	msg->insize = sizeof(struct ec_response_lightbar);
+
+	return msg;
+}
+EXPORT_SYMBOL_GPL(cros_ec_alloc_lightbar_cmd_msg);
+
+/**
+ * cros_ec_get_lightbar_version() - Get the EC lightbar version
+ *
+ * @ec: EC device, does not have to be connected directly to the AP,
+ *      can be daisy chained through another device.
+ * @ver_ptr: Detected lightbar version number
+ * @flag_ptr: Detected lightbar flags
+ *
+ * Call this function to determine the EC's lightbar version and flags
+ * information. If it doesn't exist then this function returns a negative
+ * error value.
+ *
+ * Return: 0 on success, negative errno on failure to detect a lightbar.
+ */
+int cros_ec_get_lightbar_version(struct cros_ec_dev *ec, uint32_t *ver_ptr,
+				 uint32_t *flg_ptr)
+{
+	struct ec_params_lightbar *param;
+	struct ec_response_lightbar *resp;
+	struct cros_ec_command *msg;
+	int ret;
+
+	msg = cros_ec_alloc_lightbar_cmd_msg(ec);
+	if (!msg)
+		return -ENOMEM;
+
+	param = (struct ec_params_lightbar *)msg->data;
+	param->cmd = LIGHTBAR_CMD_VERSION;
+	msg->outsize = sizeof(param->cmd);
+	msg->result = sizeof(resp->version);
+	ret = cros_ec_cmd_xfer_status(ec->ec_dev, msg);
+	if (ret < 0 && ret != -EINVAL)
+		goto exit;
+
+	switch (msg->result) {
+	case EC_RES_INVALID_PARAM:
+		/* Pixel had no version command. */
+		if (ver_ptr)
+			*ver_ptr = 0;
+		if (flg_ptr)
+			*flg_ptr = 0;
+		ret = 0;
+		break;
+	case EC_RES_SUCCESS:
+		resp = (struct ec_response_lightbar *)msg->data;
+
+		/* Future devices w/lightbars should implement this command */
+		if (ver_ptr)
+			*ver_ptr = resp->version.num;
+		if (flg_ptr)
+			*flg_ptr = resp->version.flags;
+		ret = 0;
+		break;
+	default:
+		/* Anything else (ie, EC_RES_INVALID_COMMAND) - no lightbar */
+		ret = -ENODEV;
+	}
+exit:
+	kfree(msg);
+	return ret;
+}
+EXPORT_SYMBOL_GPL(cros_ec_get_lightbar_version);
