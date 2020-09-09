@@ -229,6 +229,10 @@ u32 cros_ec_get_host_event(struct cros_ec_device *ec_dev);
 
 int cros_ec_check_features(struct cros_ec_dev *ec, int feature);
 
+struct cros_ec_command *cros_ec_alloc_lightbar_cmd_msg(struct cros_ec_dev *ec);
+int cros_ec_get_lightbar_version(struct cros_ec_dev *ec, uint32_t *ver_ptr,
+				 uint32_t *flg_ptr);
+
 int cros_ec_get_sensor_count(struct cros_ec_dev *ec);
 
 /**

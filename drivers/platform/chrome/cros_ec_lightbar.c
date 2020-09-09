@@ -82,75 +82,6 @@ out:
 	return ret;
 }
 
-static struct cros_ec_command *alloc_lightbar_cmd_msg(struct cros_ec_dev *ec)
-{
-	struct cros_ec_command *msg;
-	int len;
-
-	len = max(sizeof(struct ec_params_lightbar),
-		  sizeof(struct ec_response_lightbar));
-
-	msg = kmalloc(sizeof(*msg) + len, GFP_KERNEL);
-	if (!msg)
-		return NULL;
-
-	msg->version = 0;
-	msg->command = EC_CMD_LIGHTBAR_CMD + ec->cmd_offset;
-	msg->outsize = sizeof(struct ec_params_lightbar);
-	msg->insize = sizeof(struct ec_response_lightbar);
-
-	return msg;
-}
-
-static int get_lightbar_version(struct cros_ec_dev *ec,
-				uint32_t *ver_ptr, uint32_t *flg_ptr)
-{
-	struct ec_params_lightbar *param;
-	struct ec_response_lightbar *resp;
-	struct cros_ec_command *msg;
-	int ret;
-
-	msg = alloc_lightbar_cmd_msg(ec);
-	if (!msg)
-		return 0;
-
-	param = (struct ec_params_lightbar *)msg->data;
-	param->cmd = LIGHTBAR_CMD_VERSION;
-	ret = cros_ec_cmd_xfer_status(ec->ec_dev, msg);
-	if (ret < 0) {
-		ret = 0;
-		goto exit;
-	}
-
-	switch (msg->result) {
-	case EC_RES_INVALID_PARAM:
-		/* Pixel had no version command. */
-		if (ver_ptr)
-			*ver_ptr = 0;
-		if (flg_ptr)
-			*flg_ptr = 0;
-		ret = 1;
-		goto exit;
-
-	case EC_RES_SUCCESS:
-		resp = (struct ec_response_lightbar *)msg->data;
-
-		/* Future devices w/lightbars should implement this command */
-		if (ver_ptr)
-			*ver_ptr = resp->version.num;
-		if (flg_ptr)
-			*flg_ptr = resp->version.flags;
-		ret = 1;
-		goto exit;
-	}
-
-	/* Anything else (ie, EC_RES_INVALID_COMMAND) - no lightbar */
-	ret = 0;
-exit:
-	kfree(msg);
-	return ret;
-}
-
 static ssize_t version_show(struct device *dev,
 			    struct device_attribute *attr, char *buf)
 {
@@ -163,7 +94,7 @@ static ssize_t version_show(struct device *dev,
 		return ret;
 
 	/* This should always succeed, because we check during init. */
-	if (!get_lightbar_version(ec, &version, &flags))
+	if (cros_ec_get_lightbar_version(ec, &version, &flags))
 		return -EIO;
 
 	return scnprintf(buf, PAGE_SIZE, "%d %d\n", version, flags);
@@ -182,7 +113,7 @@ static ssize_t brightness_store(struct device *dev,
 	if (kstrtouint(buf, 0, &val))
 		return -EINVAL;
 
-	msg = alloc_lightbar_cmd_msg(ec);
+	msg = cros_ec_alloc_lightbar_cmd_msg(ec);
 	if (!msg)
 		return -ENOMEM;
 
@@ -220,7 +151,7 @@ static ssize_t led_rgb_store(struct device *dev, struct device_attribute *attr,
 	unsigned int val[4];
 	int ret, i = 0, j = 0, ok = 0;
 
-	msg = alloc_lightbar_cmd_msg(ec);
+	msg = cros_ec_alloc_lightbar_cmd_msg(ec);
 	if (!msg)
 		return -ENOMEM;
 
@@ -287,7 +218,7 @@ static ssize_t sequence_show(struct device *dev,
 	int ret;
 	struct cros_ec_dev *ec = to_cros_ec_dev(dev);
 
-	msg = alloc_lightbar_cmd_msg(ec);
+	msg = cros_ec_alloc_lightbar_cmd_msg(ec);
 	if (!msg)
 		return -ENOMEM;
 
@@ -324,7 +255,7 @@ static int lb_send_empty_cmd(struct cros_ec_dev *ec, uint8_t cmd)
 	struct cros_ec_command *msg;
 	int ret;
 
-	msg = alloc_lightbar_cmd_msg(ec);
+	msg = cros_ec_alloc_lightbar_cmd_msg(ec);
 	if (!msg)
 		return -ENOMEM;
 
@@ -352,7 +283,7 @@ static int lb_manual_suspend_ctrl(struct cros_ec_dev *ec, uint8_t enable)
 	struct cros_ec_command *msg;
 	int ret;
 
-	msg = alloc_lightbar_cmd_msg(ec);
+	msg = cros_ec_alloc_lightbar_cmd_msg(ec);
 	if (!msg)
 		return -ENOMEM;
 
@@ -399,7 +330,7 @@ static ssize_t sequence_store(struct device *dev, struct device_attribute *attr,
 			return ret;
 	}
 
-	msg = alloc_lightbar_cmd_msg(ec);
+	msg = cros_ec_alloc_lightbar_cmd_msg(ec);
 	if (!msg)
 		return -ENOMEM;
 
@@ -444,7 +375,7 @@ static ssize_t program_store(struct device *dev, struct device_attribute *attr,
 		return -EINVAL;
 	}
 
-	msg = alloc_lightbar_cmd_msg(ec);
+	msg = cros_ec_alloc_lightbar_cmd_msg(ec);
 	if (!msg)
 		return -ENOMEM;
 
@@ -531,23 +462,8 @@ static struct attribute_group cros_ec_lightbar_attr_group = {
 static int cros_ec_lightbar_probe(struct platform_device *pd)
 {
 	struct cros_ec_dev *ec_dev = dev_get_drvdata(pd->dev.parent);
-	struct cros_ec_platform *pdata = dev_get_platdata(ec_dev->dev);
 	struct device *dev = &pd->dev;
 	int ret;
-
-	/*
-	 * Only instantiate the lightbar if the EC name is 'cros_ec'. Other EC
-	 * devices like 'cros_pd' doesn't have a lightbar.
-	 */
-	if (strcmp(pdata->ec_name, CROS_EC_DEV_NAME) != 0)
-		return -ENODEV;
-
-	/*
-	 * Ask then for the lightbar version, if it's 0 then the 'cros_ec'
-	 * doesn't have a lightbar.
-	 */
-	if (!get_lightbar_version(ec_dev, NULL, NULL))
-		return -ENODEV;
 
 	/* Take control of the lightbar from the EC. */
 	lb_manual_suspend_ctrl(ec_dev, 1);
