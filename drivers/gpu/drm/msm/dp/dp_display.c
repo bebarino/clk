@@ -1084,7 +1084,6 @@ static void dp_hpd_event_setup(struct dp_display_private *dp_priv)
 static irqreturn_t dp_display_irq_handler(int irq, void *dev_id)
 {
 	struct dp_display_private *dp = dev_id;
-	irqreturn_t ret = IRQ_HANDLED;
 	u32 hpd_isr_status;
 
 	if (!dp) {
@@ -1120,7 +1119,7 @@ static irqreturn_t dp_display_irq_handler(int irq, void *dev_id)
 	/* DP aux isr */
 	dp_aux_isr(dp->aux);
 
-	return ret;
+	return IRQ_HANDLED;
 }
 
 int dp_display_request_irq(struct msm_dp *dp_display)
