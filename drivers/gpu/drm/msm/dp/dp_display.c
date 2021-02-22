@@ -155,7 +155,7 @@ static int dp_del_event(struct dp_display_private *dp_priv, u32 event)
 {
 	unsigned long flag;
 	struct dp_event *todo;
-	u32	gndx;
+	u32 gndx;
 
 	spin_lock_irqsave(&dp_priv->event_lock, flag);
 	if (dp_priv->event_pndx == dp_priv->event_gndx) {
@@ -190,7 +190,7 @@ void dp_display_signal_audio_complete(struct msm_dp *dp_display)
 static int dp_display_bind(struct device *dev, struct device *master,
 			   void *data)
 {
-	int rc = 0;
+	int rc;
 	struct dp_display_private *dp;
 	struct drm_device *drm;
 	struct msm_drm_private *priv;
@@ -211,26 +211,25 @@ static int dp_display_bind(struct device *dev, struct device *master,
 	rc = dp->parser->parse(dp->parser);
 	if (rc) {
 		DRM_ERROR("device tree parsing failed\n");
-		goto end;
+		return rc;
 	}
 
 	rc = dp_aux_register(dp->aux);
 	if (rc) {
 		DRM_ERROR("DRM DP AUX register failed\n");
-		goto end;
+		return rc;
 	}
 
 	rc = dp_power_client_init(dp->power);
 	if (rc) {
 		DRM_ERROR("Power client create failed\n");
-		goto end;
+		return rc;
 	}
 
 	rc = dp_register_audio_driver(dev, dp->audio);
 	if (rc)
 		DRM_ERROR("Audio registration Dp failed\n");
 
-end:
 	return rc;
 }
 
@@ -318,14 +317,14 @@ static int dp_display_send_hpd_notification(struct dp_display_private *dp,
 
 static int dp_display_process_hpd_high(struct dp_display_private *dp)
 {
-	int rc = 0;
+	int rc;
 	struct edid *edid;
 
 	dp->panel->max_dp_lanes = dp->parser->max_dp_lanes;
 
 	rc = dp_panel_read_sink_caps(dp->panel, dp->dp_display.connector);
 	if (rc)
-		goto end;
+		return rc;
 
 	dp_link_process_request(dp->link);
 
@@ -341,26 +340,22 @@ static int dp_display_process_hpd_high(struct dp_display_private *dp)
 	rc = dp_ctrl_on_link(dp->ctrl);
 	if (rc) {
 		DRM_ERROR("failed to complete DP link training\n");
-		goto end;
+		return rc;
 	}
 
 	dp_add_event(dp, EV_USER_NOTIFICATION, true, 0);
 
-end:
-	return rc;
+	return 0;
 }
 
 static void dp_display_host_init(struct dp_display_private *dp, int reset)
 {
-	bool flip = false;
+	bool flip = dp->usbpd->orientation == ORIENTATION_CC2;
 
 	if (dp->core_initialized) {
 		DRM_DEBUG_DP("DP core already initialized\n");
 		return;
 	}
-
-	if (dp->usbpd->orientation == ORIENTATION_CC2)
-		flip = true;
 
 	dp_display_set_encoder_mode(dp);
 
@@ -386,21 +381,18 @@ static void dp_display_host_deinit(struct dp_display_private *dp)
 
 static int dp_display_usbpd_configure_cb(struct device *dev)
 {
-	int rc = 0;
 	struct dp_display_private *dp;
 
 	if (!dev) {
 		DRM_ERROR("invalid dev\n");
-		rc = -EINVAL;
-		goto end;
+		return -EINVAL;
 	}
 
 	dp = container_of(g_dp_display,
 			struct dp_display_private, dp_display);
 	if (!dp) {
 		DRM_ERROR("no driver data found\n");
-		rc = -ENODEV;
-		goto end;
+		return -ENODEV;
 	}
 
 	dp_display_host_init(dp, false);
@@ -410,33 +402,28 @@ static int dp_display_usbpd_configure_cb(struct device *dev)
 	 * before dpcd read
 	 */
 	dp_link_psm_config(dp->link, &dp->panel->link_info, false);
-	rc = dp_display_process_hpd_high(dp);
-end:
-	return rc;
+	return dp_display_process_hpd_high(dp);
 }
 
 static int dp_display_usbpd_disconnect_cb(struct device *dev)
 {
-	int rc = 0;
 	struct dp_display_private *dp;
 
 	if (!dev) {
 		DRM_ERROR("invalid dev\n");
-		rc = -EINVAL;
-		return rc;
+		return -EINVAL;
 	}
 
 	dp = container_of(g_dp_display,
 			struct dp_display_private, dp_display);
 	if (!dp) {
 		DRM_ERROR("no driver data found\n");
-		rc = -ENODEV;
-		return rc;
+		return -ENODEV;
 	}
 
 	dp_add_event(dp, EV_USER_NOTIFICATION, false, 0);
 
-	return rc;
+	return 0;
 }
 
 static void dp_display_handle_video_request(struct dp_display_private *dp)
@@ -490,7 +477,7 @@ static int dp_display_handle_irq_hpd(struct dp_display_private *dp)
 
 static int dp_display_usbpd_attention_cb(struct device *dev)
 {
-	int rc = 0;
+	int rc;
 	u32 sink_request;
 	struct dp_display_private *dp;
 	struct dp_usbpd *hpd;
@@ -708,7 +695,7 @@ static void dp_display_deinit_sub_modules(struct dp_display_private *dp)
 
 static int dp_init_sub_modules(struct dp_display_private *dp)
 {
-	int rc = 0;
+	int rc;
 	struct device *dev = &dp->pdev->dev;
 	struct dp_usbpd_cb *cb = &dp->usbpd_cb;
 	struct dp_panel_in panel_in = {
@@ -797,7 +784,7 @@ static int dp_init_sub_modules(struct dp_display_private *dp)
 		goto error_audio;
 	}
 
-	return rc;
+	return 0;
 
 error_audio:
 	dp_ctrl_put(dp->ctrl);
@@ -830,7 +817,7 @@ static int dp_display_prepare(struct msm_dp *dp)
 
 static int dp_display_enable(struct dp_display_private *dp, u32 data)
 {
-	int rc = 0;
+	int rc;
 	struct msm_dp *dp_display;
 
 	dp_display = g_dp_display;
@@ -1144,7 +1131,7 @@ static irqreturn_t dp_display_irq_handler(int irq, void *dev_id)
 
 int dp_display_request_irq(struct msm_dp *dp_display)
 {
-	int rc = 0;
+	int rc;
 	struct dp_display_private *dp;
 
 	if (!dp_display) {
@@ -1176,7 +1163,7 @@ int dp_display_request_irq(struct msm_dp *dp_display)
 
 static int dp_display_probe(struct platform_device *pdev)
 {
-	int rc = 0;
+	int rc;
 	struct dp_display_private *dp;
 
 	if (!pdev || !pdev->dev.of_node) {
@@ -1347,7 +1334,6 @@ void msm_dp_debugfs_init(struct msm_dp *dp_display, struct drm_minor *minor)
 {
 	struct dp_display_private *dp;
 	struct device *dev;
-	int rc;
 
 	dp = container_of(dp_display, struct dp_display_private, dp_display);
 	dev = &dp->pdev->dev;
@@ -1356,8 +1342,8 @@ void msm_dp_debugfs_init(struct msm_dp *dp_display, struct drm_minor *minor)
 					dp->link, &dp->dp_display.connector,
 					minor);
 	if (IS_ERR(dp->debug)) {
-		rc = PTR_ERR(dp->debug);
-		DRM_ERROR("failed to initialize debug, rc = %d\n", rc);
+		DRM_ERROR("failed to initialize debug, rc = %d\n",
+			  PTR_ERR(dp->debug));
 		dp->debug = NULL;
 	}
 }
@@ -1397,7 +1383,7 @@ int msm_dp_modeset_init(struct msm_dp *dp_display, struct drm_device *dev,
 
 int msm_dp_display_enable(struct msm_dp *dp, struct drm_encoder *encoder)
 {
-	int rc = 0;
+	int rc;
 	struct dp_display_private *dp_display;
 	u32 state;
 
@@ -1465,7 +1451,7 @@ int msm_dp_display_pre_disable(struct msm_dp *dp, struct drm_encoder *encoder)
 
 int msm_dp_display_disable(struct msm_dp *dp, struct drm_encoder *encoder)
 {
-	int rc = 0;
+	int rc;
 	u32 state;
 	struct dp_display_private *dp_display;
 
