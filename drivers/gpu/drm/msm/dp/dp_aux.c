@@ -447,11 +447,6 @@ int dp_aux_register(struct drm_dp_aux *dp_aux)
 	struct dp_aux_private *aux;
 	int ret;
 
-	if (!dp_aux) {
-		DRM_ERROR("invalid input\n");
-		return -EINVAL;
-	}
-
 	aux = container_of(dp_aux, struct dp_aux_private, dp_aux);
 
 	aux->dp_aux.name = "dpu_dp_aux";
@@ -476,11 +471,6 @@ struct drm_dp_aux *dp_aux_get(struct device *dev, struct dp_catalog *catalog)
 {
 	struct dp_aux_private *aux;
 
-	if (!catalog) {
-		DRM_ERROR("invalid input\n");
-		return ERR_PTR(-ENODEV);
-	}
-
 	aux = devm_kzalloc(dev, sizeof(*aux), GFP_KERNEL);
 	if (!aux)
 		return ERR_PTR(-ENOMEM);
@@ -498,9 +488,6 @@ struct drm_dp_aux *dp_aux_get(struct device *dev, struct dp_catalog *catalog)
 void dp_aux_put(struct drm_dp_aux *dp_aux)
 {
 	struct dp_aux_private *aux;
-
-	if (!dp_aux)
-		return;
 
 	aux = container_of(dp_aux, struct dp_aux_private, dp_aux);
 
