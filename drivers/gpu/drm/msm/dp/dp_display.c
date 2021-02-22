@@ -1073,14 +1073,6 @@ static int hpd_event_thread(void *data)
 	return 0;
 }
 
-static void dp_hpd_event_setup(struct dp_display_private *dp_priv)
-{
-	init_waitqueue_head(&dp_priv->event_q);
-	spin_lock_init(&dp_priv->event_lock);
-
-	kthread_run(hpd_event_thread, dp_priv, "dp_hpd_handler");
-}
-
 static irqreturn_t dp_display_irq_handler(int irq, void *dev_id)
 {
 	struct dp_display_private *dp = dev_id;
@@ -1318,7 +1310,10 @@ void msm_dp_irq_postinstall(struct msm_dp *dp_display)
 
 	dp = container_of(dp_display, struct dp_display_private, dp_display);
 
-	dp_hpd_event_setup(dp);
+	init_waitqueue_head(&dp->event_q);
+	spin_lock_init(&dp->event_lock);
+
+	kthread_run(hpd_event_thread, dp, "dp_hpd_handler");
 
 	dp_add_event(dp, EV_HPD_INIT_SETUP, 0, 100);
 }
