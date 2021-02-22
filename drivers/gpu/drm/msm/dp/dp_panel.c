@@ -338,17 +338,6 @@ void dp_panel_tpg_config(struct dp_panel *dp_panel, bool enable)
 	dp_catalog_panel_tpg_enable(catalog, &panel->dp_panel.dp_mode.drm_mode);
 }
 
-void dp_panel_dump_regs(struct dp_panel *dp_panel)
-{
-	struct dp_catalog *catalog;
-	struct dp_panel_private *panel;
-
-	panel = container_of(dp_panel, struct dp_panel_private, dp_panel);
-	catalog = panel->catalog;
-
-	dp_catalog_dump_regs(catalog);
-}
-
 int dp_panel_timing_cfg(struct dp_panel *dp_panel)
 {
 	int rc = 0;
