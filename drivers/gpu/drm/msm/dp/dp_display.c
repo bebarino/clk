@@ -62,7 +62,7 @@ enum {
 	EV_DISCONNECT_PENDING_TIMEOUT,
 };
 
-#define EVENT_TIMEOUT	(HZ/10)	/* 100ms */
+#define EVENT_TIMEOUT	msecs_to_jiffies(100)
 #define DP_EVENT_Q_MAX	8
 
 #define DP_TIMEOUT_5_SECOND	(5000/EVENT_TIMEOUT)
