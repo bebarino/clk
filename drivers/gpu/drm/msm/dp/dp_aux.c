@@ -405,11 +405,6 @@ void dp_aux_isr(struct drm_dp_aux *dp_aux)
 {
 	struct dp_aux_private *aux;
 
-	if (!dp_aux) {
-		DRM_ERROR("invalid input\n");
-		return;
-	}
-
 	aux = container_of(dp_aux, struct dp_aux_private, dp_aux);
 
 	aux->isr = dp_catalog_aux_get_irq(aux->catalog);
@@ -436,11 +431,6 @@ void dp_aux_reconfig(struct drm_dp_aux *dp_aux)
 void dp_aux_init(struct drm_dp_aux *dp_aux)
 {
 	struct dp_aux_private *aux;
-
-	if (!dp_aux) {
-		DRM_ERROR("invalid input\n");
-		return;
-	}
 
 	aux = container_of(dp_aux, struct dp_aux_private, dp_aux);
 
