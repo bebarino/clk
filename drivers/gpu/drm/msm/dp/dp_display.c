@@ -579,7 +579,7 @@ static int dp_hpd_plug_handle(struct dp_display_private *dp, u32 data)
 static int dp_display_enable(struct dp_display_private *dp, u32 data);
 static int dp_display_disable(struct dp_display_private *dp, u32 data);
 
-static int dp_connect_pending_timeout(struct dp_display_private *dp, u32 data)
+static void dp_connect_pending_timeout(struct dp_display_private *dp, u32 data)
 {
 	u32 state;
 
@@ -592,8 +592,6 @@ static int dp_connect_pending_timeout(struct dp_display_private *dp, u32 data)
 	}
 
 	mutex_unlock(&dp->event_mutex);
-
-	return 0;
 }
 
 static void dp_display_handle_plugged_change(struct msm_dp *dp_display,
@@ -610,27 +608,24 @@ static void dp_display_handle_plugged_change(struct msm_dp *dp_display,
 		dp_display->plugged_cb(dp_display->codec_dev, plugged);
 }
 
-static int dp_hpd_unplug_handle(struct dp_display_private *dp, u32 data)
+static void dp_hpd_unplug_handle(struct dp_display_private *dp, u32 data)
 {
 	struct dp_usbpd *hpd = dp->usbpd;
 	u32 state;
 
 	if (!hpd)
-		return 0;
+		return;
 
 	mutex_lock(&dp->event_mutex);
 
 	state = dp->hpd_state;
-	if (state == ST_DISCONNECT_PENDING || state == ST_DISCONNECTED) {
-		mutex_unlock(&dp->event_mutex);
-		return 0;
-	}
+	if (state == ST_DISCONNECT_PENDING || state == ST_DISCONNECTED)
+		goto unlock;
 
 	if (state == ST_CONNECT_PENDING) {
 		/* wait until CONNECTED */
 		dp_add_event(dp, EV_HPD_UNPLUG_INT, 0, 1); /* delay = 1 */
-		mutex_unlock(&dp->event_mutex);
-		return 0;
+		goto unlock;
 	}
 
 	dp->hpd_state = ST_DISCONNECT_PENDING;
@@ -658,25 +653,23 @@ static int dp_hpd_unplug_handle(struct dp_display_private *dp, u32 data)
 					DP_DP_IRQ_HPD_INT_MASK, true);
 
 	/* uevent will complete disconnection part */
+unlock:
 	mutex_unlock(&dp->event_mutex);
-	return 0;
 }
 
-static int dp_disconnect_pending_timeout(struct dp_display_private *dp, u32 data)
+static void dp_disconnect_pending_timeout(struct dp_display_private *dp, u32 data)
 {
 	u32 state;
 
 	mutex_lock(&dp->event_mutex);
 
-	state =  dp->hpd_state;
+	state = dp->hpd_state;
 	if (state == ST_DISCONNECT_PENDING) {
 		dp_display_disable(dp, 0);
 		dp->hpd_state = ST_DISCONNECTED;
 	}
 
 	mutex_unlock(&dp->event_mutex);
-
-	return 0;
 }
 
 static void dp_irq_hpd_handle(struct dp_display_private *dp, u32 data)
