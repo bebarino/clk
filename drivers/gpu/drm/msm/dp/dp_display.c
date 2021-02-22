@@ -114,11 +114,6 @@ struct dp_display_private {
 	struct dp_audio *audio;
 };
 
-static const struct of_device_id dp_dt_match[] = {
-	{.compatible = "qcom,sc7180-dp"},
-	{}
-};
-
 static int dp_add_event(struct dp_display_private *dp_priv, u32 event,
 						u32 data, u32 delay)
 {
@@ -1255,6 +1250,11 @@ static int dp_pm_suspend(struct device *dev)
 static const struct dev_pm_ops dp_pm_ops = {
 	.suspend = dp_pm_suspend,
 	.resume =  dp_pm_resume,
+};
+
+static const struct of_device_id dp_dt_match[] = {
+	{.compatible = "qcom,sc7180-dp"},
+	{}
 };
 
 static struct platform_driver dp_display_driver = {
