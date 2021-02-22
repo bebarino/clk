@@ -1270,13 +1270,7 @@ static struct platform_driver dp_display_driver = {
 
 int __init msm_dp_register(void)
 {
-	int ret;
-
-	ret = platform_driver_register(&dp_display_driver);
-	if (ret)
-		DRM_ERROR("Dp display driver register failed");
-
-	return ret;
+	return platform_driver_register(&dp_display_driver);
 }
 
 void __exit msm_dp_unregister(void)
