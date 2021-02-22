@@ -76,7 +76,6 @@ struct dp_display_private {
 
 	/* state variables */
 	bool core_initialized;
-	bool hpd_irq_on;
 	bool audio_supported;
 
 	struct platform_device *pdev;
