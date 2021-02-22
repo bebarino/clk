@@ -19,7 +19,6 @@ struct dp_aux_private {
 	struct completion comp;
 
 	u32 aux_error_num;
-	u32 retry_cnt;
 	bool cmd_busy;
 	bool native;
 	bool read;
@@ -395,7 +394,6 @@ static ssize_t dp_aux_transfer(struct drm_dp_aux *dp_aux,
 
 	/* Return requested size for success or retry */
 	ret = msg->size;
-	aux->retry_cnt = 0;
 
 unlock_exit:
 	aux->cmd_busy = false;
@@ -447,7 +445,6 @@ void dp_aux_init(struct drm_dp_aux *dp_aux)
 	aux = container_of(dp_aux, struct dp_aux_private, dp_aux);
 
 	dp_catalog_aux_enable(aux->catalog, true);
-	aux->retry_cnt = 0;
 }
 
 void dp_aux_deinit(struct drm_dp_aux *dp_aux)
@@ -508,7 +505,6 @@ struct drm_dp_aux *dp_aux_get(struct device *dev, struct dp_catalog *catalog)
 
 	aux->dev = dev;
 	aux->catalog = catalog;
-	aux->retry_cnt = 0;
 
 	return &aux->dp_aux;
 }
