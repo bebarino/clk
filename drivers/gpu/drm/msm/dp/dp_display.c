@@ -5,8 +5,6 @@
 
 #include <linux/module.h>
 #include <linux/slab.h>
-#include <linux/uaccess.h>
-#include <linux/debugfs.h>
 #include <linux/component.h>
 #include <linux/of_irq.h>
 #include <linux/delay.h>
@@ -28,7 +26,6 @@
 #include "dp_debug.h"
 
 static struct msm_dp *g_dp_display;
-#define HPD_STRING_SIZE 30
 
 enum {
 	ISR_DISCONNECTED,
@@ -66,9 +63,6 @@ enum {
 #define DP_EVENT_Q_MAX	8
 
 #define DP_TIMEOUT_5_SECOND	(5000/EVENT_TIMEOUT)
-#define DP_TIMEOUT_NONE		0
-
-#define WAIT_FOR_RESUME_TIMEOUT_JIFFIES (HZ / 2)
 
 struct dp_event {
 	u32 event_id;
