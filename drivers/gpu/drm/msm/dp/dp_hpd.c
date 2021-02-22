@@ -5,18 +5,11 @@
 
 #define pr_fmt(fmt)	"[drm-dp] %s: " fmt, __func__
 
-#include <linux/slab.h>
 #include <linux/device.h>
+#include <linux/kernel.h>
+#include <linux/slab.h>
 
 #include "dp_hpd.h"
-
-/* DP specific VDM commands */
-#define DP_USBPD_VDM_STATUS	0x10
-#define DP_USBPD_VDM_CONFIGURE	0x11
-
-/* USBPD-TypeC specific Macros */
-#define VDM_VERSION		0x0
-#define USB_C_DP_SID		0xFF01
 
 struct dp_hpd_private {
 	struct device *dev;
@@ -26,7 +19,6 @@ struct dp_hpd_private {
 
 int dp_hpd_connect(struct dp_usbpd *dp_usbpd, bool hpd)
 {
-	int rc = 0;
 	struct dp_hpd_private *hpd_priv;
 
 	hpd_priv = container_of(dp_usbpd, struct dp_hpd_private,
@@ -44,7 +36,7 @@ int dp_hpd_connect(struct dp_usbpd *dp_usbpd, bool hpd)
 	else
 		hpd_priv->dp_cb->disconnect(hpd_priv->dev);
 
-	return rc;
+	return 0;
 }
 
 struct dp_usbpd *dp_hpd_get(struct device *dev, struct dp_usbpd_cb *cb)
