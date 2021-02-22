@@ -89,7 +89,9 @@ struct dp_display_private {
 	struct dp_link    *link;
 	struct dp_panel   *panel;
 	struct dp_ctrl    *ctrl;
+#ifdef CONFIG_DEBUG_FS
 	struct dp_debug   *debug;
+#endif
 
 	struct dp_usbpd_cb usbpd_cb;
 	struct dp_display_mode dp_mode;
