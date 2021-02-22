@@ -679,7 +679,7 @@ static int dp_disconnect_pending_timeout(struct dp_display_private *dp, u32 data
 	return 0;
 }
 
-static int dp_irq_hpd_handle(struct dp_display_private *dp, u32 data)
+static void dp_irq_hpd_handle(struct dp_display_private *dp, u32 data)
 {
 	u32 state;
 	int ret;
@@ -687,34 +687,21 @@ static int dp_irq_hpd_handle(struct dp_display_private *dp, u32 data)
 	mutex_lock(&dp->event_mutex);
 
 	/* irq_hpd can happen at either connected or disconnected state */
-	state =  dp->hpd_state;
-	if (state == ST_DISPLAY_OFF) {
-		mutex_unlock(&dp->event_mutex);
-		return 0;
-	}
-
-	if (state == ST_CONNECT_PENDING) {
-		/* wait until ST_CONNECTED */
-		dp_add_event(dp, EV_IRQ_HPD_INT, 0, 1); /* delay = 1 */
-		mutex_unlock(&dp->event_mutex);
-		return 0;
-	}
+	state = dp->hpd_state;
+	if (state == ST_DISPLAY_OFF)
+		goto unlock;
 
 	if (state == ST_CONNECT_PENDING || state == ST_DISCONNECT_PENDING) {
 		/* wait until ST_CONNECTED */
 		dp_add_event(dp, EV_IRQ_HPD_INT, 0, 1); /* delay = 1 */
-		mutex_unlock(&dp->event_mutex);
-		return 0;
+		goto unlock;
 	}
 
 	ret = dp_display_usbpd_attention_cb(&dp->pdev->dev);
-	if (ret == -ECONNRESET) { /* cable unplugged */
+	if (ret == -ECONNRESET) /* cable unplugged */
 		dp->core_initialized = false;
-	}
-
+unlock:
 	mutex_unlock(&dp->event_mutex);
-
-	return 0;
 }
 
 static void dp_display_deinit_sub_modules(struct dp_display_private *dp)
