@@ -4,6 +4,24 @@
 #ifndef __QCOM_SCM_INT_H
 #define __QCOM_SCM_INT_H
 
+#include <linux/types.h>
+#include <linux/reset-controller.h>
+
+struct clk;
+struct device;
+
+struct qcom_scm {
+	struct device *dev;
+	struct clk *core_clk;
+	struct clk *iface_clk;
+	struct clk *bus_clk;
+	struct reset_controller_dev reset;
+
+	u64 dload_mode_addr;
+};
+
+extern struct qcom_scm *__scm;
+
 enum qcom_scm_convention {
 	SMC_CONVENTION_UNKNOWN,
 	SMC_CONVENTION_LEGACY,
@@ -68,11 +86,26 @@ extern int __scm_smc_call(struct device *dev, const struct qcom_scm_desc *desc,
 	__scm_smc_call((dev), (desc), qcom_scm_convention, (res), (atomic))
 
 #define SCM_LEGACY_FNID(s, c)	(((s) << 10) | ((c) & 0x3ff))
+#if IS_ENABLED(CONFIG_ARM)
 extern int scm_legacy_call_atomic(struct device *dev,
 				  const struct qcom_scm_desc *desc,
 				  struct qcom_scm_res *res);
 extern int scm_legacy_call(struct device *dev, const struct qcom_scm_desc *desc,
 			   struct qcom_scm_res *res);
+#else
+static inline int scm_legacy_call_atomic(struct device *dev,
+					 const struct qcom_scm_desc *desc,
+					 struct qcom_scm_res *res)
+{
+	return -EINVAL;
+}
+
+static inline int scm_legacy_call(struct device *dev, const struct qcom_scm_desc *desc,
+				  struct qcom_scm_res *res)
+{
+	return -EINVAL;
+}
+#endif
 
 #define QCOM_SCM_SVC_BOOT		0x01
 #define QCOM_SCM_BOOT_SET_ADDR		0x01

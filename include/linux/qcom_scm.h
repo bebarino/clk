@@ -64,9 +64,6 @@ enum qcom_scm_ice_cipher {
 #if IS_ENABLED(CONFIG_QCOM_SCM)
 extern bool qcom_scm_is_available(void);
 
-extern int qcom_scm_set_cold_boot_addr(void *entry, const cpumask_t *cpus);
-extern int qcom_scm_set_warm_boot_addr(void *entry, const cpumask_t *cpus);
-extern void qcom_scm_cpu_power_down(u32 flags);
 extern int qcom_scm_set_remote_state(u32 state, u32 id);
 
 extern int qcom_scm_pas_init_image(u32 peripheral, const void *metadata,
@@ -115,11 +112,6 @@ extern int qcom_scm_qsmmu500_wait_safe_toggle(bool en);
 
 static inline bool qcom_scm_is_available(void) { return false; }
 
-static inline int qcom_scm_set_cold_boot_addr(void *entry,
-		const cpumask_t *cpus) { return -ENODEV; }
-static inline int qcom_scm_set_warm_boot_addr(void *entry,
-		const cpumask_t *cpus) { return -ENODEV; }
-static inline void qcom_scm_cpu_power_down(u32 flags) {}
 static inline u32 qcom_scm_set_remote_state(u32 state,u32 id)
 		{ return -ENODEV; }
 
@@ -171,4 +163,17 @@ static inline int qcom_scm_hdcp_req(struct qcom_scm_hdcp_req *req, u32 req_cnt,
 static inline int qcom_scm_qsmmu500_wait_safe_toggle(bool en)
 		{ return -ENODEV; }
 #endif
+
+#if IS_ENABLED(CONFIG_ARM) && IS_ENABLED(CONFIG_QCOM_SCM)
+extern int qcom_scm_set_cold_boot_addr(void *entry, const cpumask_t *cpus);
+extern int qcom_scm_set_warm_boot_addr(void *entry, const cpumask_t *cpus);
+extern void qcom_scm_cpu_power_down(u32 flags);
+#else
+static inline int qcom_scm_set_cold_boot_addr(void *entry,
+		const cpumask_t *cpus) { return -ENODEV; }
+static inline int qcom_scm_set_warm_boot_addr(void *entry,
+		const cpumask_t *cpus) { return -ENODEV; }
+static inline void qcom_scm_cpu_power_down(u32 flags) {}
+#endif
+
 #endif
