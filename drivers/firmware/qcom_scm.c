@@ -151,6 +151,9 @@ found:
 	}
 	spin_unlock_irqrestore(&scm_query_lock, flags);
 
+	WARN(IS_ENABLED(CONFIG_ARM64) &&
+	     qcom_scm_convention == SMC_CONVENTION_LEGACY,
+	     "qcom_scm: Detected legacy convention on arm64; firmware is broken\n");
 	return qcom_scm_convention;
 }
 
