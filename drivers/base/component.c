@@ -460,6 +460,13 @@ static void free_master(struct master *master)
  * @match are available, it will be assembled by calling
  * &component_master_ops.bind from @ops. Must be unregistered by calling
  * component_master_del().
+ *
+ * Return: 0 on a successful aggregate driver creation or -ve errno.
+ *
+ * A -EPROBE_DEFER value is returned when all component devices
+ * aren't added yet. This supports the case when the caller wants
+ * to know that they should defer @dev driver probe until the
+ * components in @match are added.
  */
 int component_master_add_with_match(struct device *dev,
 	const struct component_master_ops *ops,
@@ -487,6 +494,8 @@ int component_master_add_with_match(struct device *dev,
 	list_add(&master->node, &masters);
 
 	ret = try_to_bring_up_master(master, NULL);
+	if (ret == 0)
+		ret = -EPROBE_DEFER;
 
 	if (ret < 0)
 		free_master(master);
