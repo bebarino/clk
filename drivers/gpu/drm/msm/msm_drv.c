@@ -1134,33 +1134,9 @@ static int __maybe_unused msm_pm_resume(struct device *dev)
 	return msm_runtime_resume(dev);
 }
 
-static int __maybe_unused msm_pm_prepare(struct device *dev)
-{
-	struct drm_device *ddev = dev_get_drvdata(dev);
-	struct msm_drm_private *priv = ddev ? ddev->dev_private : NULL;
-
-	if (!priv || !priv->kms)
-		return 0;
-
-	return drm_mode_config_helper_suspend(ddev);
-}
-
-static void __maybe_unused msm_pm_complete(struct device *dev)
-{
-	struct drm_device *ddev = dev_get_drvdata(dev);
-	struct msm_drm_private *priv = ddev ? ddev->dev_private : NULL;
-
-	if (!priv || !priv->kms)
-		return;
-
-	drm_mode_config_helper_resume(ddev);
-}
-
 static const struct dev_pm_ops msm_pm_ops = {
 	SET_SYSTEM_SLEEP_PM_OPS(msm_pm_suspend, msm_pm_resume)
 	SET_RUNTIME_PM_OPS(msm_runtime_suspend, msm_runtime_resume, NULL)
-	.prepare = msm_pm_prepare,
-	.complete = msm_pm_complete,
 };
 
 /*
@@ -1345,6 +1321,34 @@ static void msm_drm_shutdown(struct aggregate_device *adev)
 	drm_atomic_helper_shutdown(drm);
 }
 
+static int __maybe_unused msm_drm_suspend(struct device *dev)
+{
+	struct aggregate_device *adev = to_aggregate_device(dev);
+	struct drm_device *ddev = dev_get_drvdata(adev->parent);
+	struct msm_drm_private *priv = ddev ? ddev->dev_private : NULL;
+
+	if (!priv || !priv->kms)
+		return 0;
+
+	return drm_mode_config_helper_suspend(ddev);
+}
+
+static int __maybe_unused msm_drm_resume(struct device *dev)
+{
+	struct aggregate_device *adev = to_aggregate_device(dev);
+	struct drm_device *ddev = dev_get_drvdata(adev->parent);
+	struct msm_drm_private *priv = ddev ? ddev->dev_private : NULL;
+
+	if (!priv || !priv->kms)
+		return 0;
+
+	return drm_mode_config_helper_resume(ddev);
+}
+
+static const struct dev_pm_ops msm_drm_pm_ops = {
+	SET_SYSTEM_SLEEP_PM_OPS(msm_drm_suspend, msm_drm_resume)
+};
+
 static struct aggregate_driver msm_drm_aggregate_driver = {
 	.probe = msm_drm_bind,
 	.remove = msm_drm_unbind,
@@ -1352,6 +1356,7 @@ static struct aggregate_driver msm_drm_aggregate_driver = {
 	.driver = {
 		.name	= "msm_drm",
 		.owner	= THIS_MODULE,
+		.pm     = &msm_drm_pm_ops,
 	},
 };
 
