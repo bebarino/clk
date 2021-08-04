@@ -117,12 +117,6 @@ int dpu_encoder_wait_for_event(struct drm_encoder *drm_encoder,
 enum dpu_intf_mode dpu_encoder_get_intf_mode(struct drm_encoder *encoder);
 
 /**
- * dpu_encoder_virt_runtime_resume - pm runtime resume the encoder configs
- * @encoder:	encoder pointer
- */
-void dpu_encoder_virt_runtime_resume(struct drm_encoder *encoder);
-
-/**
  * dpu_encoder_init - initialize virtual encoder object
  * @dev:        Pointer to drm device structure
  * @disp_info:  Pointer to display information structure

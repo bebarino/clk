@@ -1126,7 +1126,7 @@ static void _dpu_encoder_virt_enable_helper(struct drm_encoder *drm_enc)
 	}
 }
 
-void dpu_encoder_virt_runtime_resume(struct drm_encoder *drm_enc)
+static void dpu_encoder_virt_runtime_resume(struct drm_encoder *drm_enc)
 {
 	struct dpu_encoder_virt *dpu_enc = to_dpu_encoder_virt(drm_enc);
 
@@ -2142,9 +2142,10 @@ static const struct drm_encoder_helper_funcs dpu_encoder_helper_funcs = {
 };
 
 static const struct drm_encoder_funcs dpu_encoder_funcs = {
-		.destroy = dpu_encoder_destroy,
-		.late_register = dpu_encoder_late_register,
-		.early_unregister = dpu_encoder_early_unregister,
+	.reset = dpu_encoder_virt_runtime_resume,
+	.destroy = dpu_encoder_destroy,
+	.late_register = dpu_encoder_late_register,
+	.early_unregister = dpu_encoder_early_unregister,
 };
 
 int dpu_encoder_setup(struct drm_device *dev, struct drm_encoder *enc,

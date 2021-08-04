@@ -289,14 +289,15 @@ static int dpu_kms_global_obj_init(struct dpu_kms *dpu_kms)
 	return 0;
 }
 
-static int dpu_kms_parse_data_bus_icc_path(struct dpu_kms *dpu_kms)
+static int dpu_kms_parse_data_bus_icc_path(struct platform_device *pdev, struct dpu_kms *dpu_kms)
 {
 	struct icc_path *path0;
 	struct icc_path *path1;
-	struct drm_device *dev = dpu_kms->dev;
+	struct device *dev = &pdev->dev;
 
-	path0 = of_icc_get(dev->dev, "mdp0-mem");
-	path1 = of_icc_get(dev->dev, "mdp1-mem");
+	/* The parent device (mdss wrapper) has the interconnects property */
+	path0 = of_icc_get(dev->parent, "mdp0-mem");
+	path1 = of_icc_get(dev->parent, "mdp1-mem");
 
 	if (IS_ERR_OR_NULL(path0))
 		return PTR_ERR_OR_ZERO(path0);
@@ -993,8 +994,6 @@ static int dpu_kms_hw_init(struct msm_kms *kms)
 		DPU_DEBUG("REG_DMA is not defined");
 	}
 
-	dpu_kms_parse_data_bus_icc_path(dpu_kms);
-
 	pm_runtime_get_sync(&dpu_kms->pdev->dev);
 
 	dpu_kms->core_rev = readl_relaxed(dpu_kms->mmio + 0x0);
@@ -1141,8 +1140,33 @@ static int dpu_bind(struct device *dev, struct device *master, void *data)
 	struct platform_device *pdev = to_platform_device(dev);
 	struct msm_drm_private *priv = ddev->dev_private;
 	struct dpu_kms *dpu_kms;
+
+	dpu_kms = platform_get_drvdata(pdev);
+	if (!dpu_kms)
+		return -ENODEV;
+
+	dpu_kms->dev = ddev;
+	priv->kms = &dpu_kms->base;
+	pm_runtime_enable(dev);
+
+	return 0;
+}
+
+static void dpu_unbind(struct device *dev, struct device *master, void *data)
+{
+}
+
+static const struct component_ops dpu_ops = {
+	.bind   = dpu_bind,
+	.unbind = dpu_unbind,
+};
+
+static int dpu_dev_probe(struct platform_device *pdev)
+{
+	struct device *dev = &pdev->dev;
+	struct dpu_kms *dpu_kms;
 	struct dss_module_power *mp;
-	int ret = 0;
+	int ret;
 
 	dpu_kms = devm_kzalloc(&pdev->dev, sizeof(*dpu_kms), GFP_KERNEL);
 	if (!dpu_kms)
@@ -1165,6 +1189,10 @@ static int dpu_bind(struct device *dev, struct device *master, void *data)
 		return ret;
 	}
 
+	ret = dpu_kms_parse_data_bus_icc_path(pdev, dpu_kms);
+	if (ret)
+		return ret;
+
 	platform_set_drvdata(pdev, dpu_kms);
 
 	ret = msm_kms_init(&dpu_kms->base, &kms_funcs);
@@ -1172,22 +1200,20 @@ static int dpu_bind(struct device *dev, struct device *master, void *data)
 		DPU_ERROR("failed to init kms, ret=%d\n", ret);
 		return ret;
 	}
-	dpu_kms->dev = ddev;
 	dpu_kms->pdev = pdev;
 
-	pm_runtime_enable(&pdev->dev);
+	//pm_runtime_enable(dev);
 	dpu_kms->rpm_enabled = true;
 
-	priv->kms = &dpu_kms->base;
-
-	return ret;
+	return component_add(&pdev->dev, &dpu_ops);
 }
 
-static void dpu_unbind(struct device *dev, struct device *master, void *data)
+static int dpu_dev_remove(struct platform_device *pdev)
 {
-	struct platform_device *pdev = to_platform_device(dev);
 	struct dpu_kms *dpu_kms = platform_get_drvdata(pdev);
 	struct dss_module_power *mp = &dpu_kms->mp;
+
+	component_del(&pdev->dev, &dpu_ops);
 
 	msm_dss_put_clk(mp->clk_config, mp->num_clk);
 	devm_kfree(&pdev->dev, mp->clk_config);
@@ -1195,21 +1221,7 @@ static void dpu_unbind(struct device *dev, struct device *master, void *data)
 
 	if (dpu_kms->rpm_enabled)
 		pm_runtime_disable(&pdev->dev);
-}
 
-static const struct component_ops dpu_ops = {
-	.bind   = dpu_bind,
-	.unbind = dpu_unbind,
-};
-
-static int dpu_dev_probe(struct platform_device *pdev)
-{
-	return component_add(&pdev->dev, &dpu_ops);
-}
-
-static int dpu_dev_remove(struct platform_device *pdev)
-{
-	component_del(&pdev->dev, &dpu_ops);
 	return 0;
 }
 
@@ -1238,11 +1250,8 @@ static int __maybe_unused dpu_runtime_resume(struct device *dev)
 	struct platform_device *pdev = to_platform_device(dev);
 	struct dpu_kms *dpu_kms = platform_get_drvdata(pdev);
 	struct drm_encoder *encoder;
-	struct drm_device *ddev;
 	struct dss_module_power *mp = &dpu_kms->mp;
 	int i;
-
-	ddev = dpu_kms->dev;
 
 	WARN_ON(!(dpu_kms->num_paths));
 	/* Min vote of BW is required before turning on AXI clk */
@@ -1256,9 +1265,6 @@ static int __maybe_unused dpu_runtime_resume(struct device *dev)
 	}
 
 	dpu_vbif_init_memtypes(dpu_kms);
-
-	drm_for_each_encoder(encoder, ddev)
-		dpu_encoder_virt_runtime_resume(encoder);
 
 	return rc;
 }
