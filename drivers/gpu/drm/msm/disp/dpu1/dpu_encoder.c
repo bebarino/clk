@@ -26,6 +26,7 @@
 #include "dpu_crtc.h"
 #include "dpu_trace.h"
 #include "dpu_core_irq.h"
+#include "dpu_vbif.h"
 #include "disp/msm_disp_snapshot.h"
 
 #define DPU_DEBUG_ENC(e, fmt, ...) DRM_DEBUG_ATOMIC("enc%d " fmt,\
@@ -1129,6 +1130,11 @@ static void _dpu_encoder_virt_enable_helper(struct drm_encoder *drm_enc)
 static void dpu_encoder_virt_runtime_resume(struct drm_encoder *drm_enc)
 {
 	struct dpu_encoder_virt *dpu_enc = to_dpu_encoder_virt(drm_enc);
+	struct drm_device *ddev = drm_enc->dev;
+	struct msm_drm_private *priv = ddev->dev_private;
+	struct dpu_kms *dpu_kms = to_dpu_kms(priv->kms);
+
+	dpu_vbif_init_memtypes(dpu_kms);
 
 	mutex_lock(&dpu_enc->enc_lock);
 

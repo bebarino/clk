@@ -1249,7 +1249,6 @@ static int __maybe_unused dpu_runtime_resume(struct device *dev)
 	int rc = -1;
 	struct platform_device *pdev = to_platform_device(dev);
 	struct dpu_kms *dpu_kms = platform_get_drvdata(pdev);
-	struct drm_encoder *encoder;
 	struct dss_module_power *mp = &dpu_kms->mp;
 	int i;
 
@@ -1263,8 +1262,6 @@ static int __maybe_unused dpu_runtime_resume(struct device *dev)
 		DPU_ERROR("clock enable failed rc:%d\n", rc);
 		return rc;
 	}
-
-	dpu_vbif_init_memtypes(dpu_kms);
 
 	return rc;
 }
