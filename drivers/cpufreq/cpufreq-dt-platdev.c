@@ -179,25 +179,29 @@ static bool __init cpu0_node_has_opp_v2_prop(void)
 static int __init cpufreq_dt_platdev_init(void)
 {
 	struct device_node *np = of_find_node_by_path("/");
+	struct device_node *soc_np = of_find_node_by_path("/soc");
 	const struct of_device_id *match;
 	const void *data = NULL;
 
-	if (!np)
+	if (!np && !soc_np)
 		return -ENODEV;
 
 	match = of_match_node(allowlist, np);
-	if (match) {
+	if (match || (match = of_match_node(allowlist, soc_np))) {
 		data = match->data;
 		goto create_pdev;
 	}
 
-	if (cpu0_node_has_opp_v2_prop() && !of_match_node(blocklist, np))
+	if (cpu0_node_has_opp_v2_prop() && !of_match_node(blocklist, np) &&
+	    !of_match_node(blocklist, soc_np))
 		goto create_pdev;
 
+	of_node_put(soc_np);
 	of_node_put(np);
 	return -ENODEV;
 
 create_pdev:
+	of_node_put(soc_np);
 	of_node_put(np);
 	return PTR_ERR_OR_ZERO(platform_device_register_data(NULL, "cpufreq-dt",
 			       -1, data,
