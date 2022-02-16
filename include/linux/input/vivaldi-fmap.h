@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0 */
-#ifndef _VIVALDI_KEYMAP_H
-#define _VIVALDI_KEYMAP_H
+#ifndef _VIVALDI_FMAP_H
+#define _VIVALDI_FMAP_H
 
 #include <linux/types.h>
 
@@ -34,4 +34,4 @@ void vivaldi_hid_feature_mapping(struct vivaldi_data *data,
 				 struct hid_field *field,
 				 struct hid_usage *usage);
 
-#endif /* _VIVALDI_KEYMAP_H */
+#endif /* _VIVALDI_FMAP_H */
