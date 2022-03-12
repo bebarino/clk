@@ -10,6 +10,15 @@ maintainers:
   - Benson Leung <bleung@chromium.org>
   - Guenter Roeck <groeck@chromium.org>
 
+select:
+  properties:
+    compatible:
+      contains:
+        const: google,cros-ec-spi
+    boot0-gpios: false
+  required:
+    - compatible
+
 description:
   Google's ChromeOS EC is a microcontroller which talks to the AP and
   implements various functions such as keyboard and battery charging.
