@@ -58,7 +58,6 @@ DEFINE_QNODE(mas_qnm_pcie, SC8180X_MASTER_GEM_NOC_PCIE_SNOC, 1, 32, SC8180X_SLAV
 DEFINE_QNODE(mas_qnm_snoc_gc, SC8180X_MASTER_SNOC_GC_MEM_NOC, 1, 8, SC8180X_SLAVE_LLCC);
 DEFINE_QNODE(mas_qnm_snoc_sf, SC8180X_MASTER_SNOC_SF_MEM_NOC, 1, 32, SC8180X_SLAVE_LLCC);
 DEFINE_QNODE(mas_qxm_ecc, SC8180X_MASTER_ECC, 2, 32, SC8180X_SLAVE_LLCC);
-DEFINE_QNODE(mas_ipa_core_master, SC8180X_MASTER_IPA_CORE, 1, 8, SC8180X_SLAVE_IPA_CORE);
 DEFINE_QNODE(mas_llcc_mc, SC8180X_MASTER_LLCC, 8, 4, SC8180X_SLAVE_EBI_CH0);
 DEFINE_QNODE(mas_qhm_mnoc_cfg, SC8180X_MASTER_CNOC_MNOC_CFG, 1, 4, SC8180X_SLAVE_SERVICE_MNOC);
 DEFINE_QNODE(mas_qxm_camnoc_hf0, SC8180X_MASTER_CAMNOC_HF0, 1, 32, SC8180X_SLAVE_MNOC_HF_MEM_NOC);
@@ -147,7 +146,6 @@ DEFINE_QNODE(slv_qns_gem_noc_snoc, SC8180X_SLAVE_GEM_NOC_SNOC, 1, 8, SC8180X_MAS
 DEFINE_QNODE(slv_qns_llcc, SC8180X_SLAVE_LLCC, 8, 16, SC8180X_MASTER_LLCC);
 DEFINE_QNODE(slv_srvc_gemnoc, SC8180X_SLAVE_SERVICE_GEM_NOC, 1, 4);
 DEFINE_QNODE(slv_srvc_gemnoc1, SC8180X_SLAVE_SERVICE_GEM_NOC_1, 1, 4);
-DEFINE_QNODE(slv_ipa_core_slave, SC8180X_SLAVE_IPA_CORE, 1, 8);
 DEFINE_QNODE(slv_ebi, SC8180X_SLAVE_EBI_CH0, 8, 4);
 DEFINE_QNODE(slv_qns2_mem_noc, SC8180X_SLAVE_MNOC_SF_MEM_NOC, 1, 32, SC8180X_MASTER_MNOC_SF_MEM_NOC);
 DEFINE_QNODE(slv_qns_mem_noc_hf, SC8180X_SLAVE_MNOC_HF_MEM_NOC, 2, 32, SC8180X_MASTER_MNOC_HF_MEM_NOC);
@@ -182,7 +180,6 @@ DEFINE_QBCM(bcm_sn0, "SN0", false, &slv_qns_gemnoc_sf);
 DEFINE_QBCM(bcm_sn1, "SN1", false, &slv_qxs_imem);
 DEFINE_QBCM(bcm_sn2, "SN2", false, &slv_qns_gemnoc_gc);
 DEFINE_QBCM(bcm_co2, "CO2", false, &mas_qnm_npu);
-DEFINE_QBCM(bcm_ip0, "IP0", false, &slv_ipa_core_slave);
 DEFINE_QBCM(bcm_sn3, "SN3", false, &slv_srvc_aggre1_noc, &slv_qns_cnoc);
 DEFINE_QBCM(bcm_sn4, "SN4", false, &slv_qxs_pimem);
 DEFINE_QBCM(bcm_sn8, "SN8", false, &slv_xs_pcie_0, &slv_xs_pcie_1, &slv_xs_pcie_2, &slv_xs_pcie_3);
@@ -220,10 +217,6 @@ static struct qcom_icc_bcm *gem_noc_bcms[] = {
 	&bcm_sh0,
 	&bcm_sh2,
 	&bcm_sh3,
-};
-
-static struct qcom_icc_bcm *ipa_virt_bcms[] = {
-	&bcm_ip0,
 };
 
 static struct qcom_icc_bcm *mc_virt_bcms[] = {
@@ -384,11 +377,6 @@ static struct qcom_icc_node *gem_noc_nodes[] = {
 	[SLAVE_SERVICE_GEM_NOC_1] = &slv_srvc_gemnoc1,
 };
 
-static struct qcom_icc_node *ipa_virt_nodes[] = {
-	[MASTER_IPA_CORE] = &mas_ipa_core_master,
-	[SLAVE_IPA_CORE] = &slv_ipa_core_slave,
-};
-
 static struct qcom_icc_node *mc_virt_nodes[] = {
 	[MASTER_LLCC] = &mas_llcc_mc,
 	[SLAVE_EBI_CH0] = &slv_ebi,
@@ -473,13 +461,6 @@ static const struct qcom_icc_desc sc8180x_gem_noc  = {
 	.num_nodes = ARRAY_SIZE(gem_noc_nodes),
 	.bcms = gem_noc_bcms,
 	.num_bcms = ARRAY_SIZE(gem_noc_bcms),
-};
-
-static const struct qcom_icc_desc sc8180x_ipa_virt  = {
-	.nodes = ipa_virt_nodes,
-	.num_nodes = ARRAY_SIZE(ipa_virt_nodes),
-	.bcms = ipa_virt_bcms,
-	.num_bcms = ARRAY_SIZE(ipa_virt_bcms),
 };
 
 static const struct qcom_icc_desc sc8180x_mc_virt  = {
@@ -603,7 +584,6 @@ static const struct of_device_id qnoc_of_match[] = {
 	{ .compatible = "qcom,sc8180x-config-noc", .data = &sc8180x_config_noc },
 	{ .compatible = "qcom,sc8180x-dc-noc", .data = &sc8180x_dc_noc },
 	{ .compatible = "qcom,sc8180x-gem-noc", .data = &sc8180x_gem_noc },
-	{ .compatible = "qcom,sc8180x-ipa-virt", .data = &sc8180x_ipa_virt },
 	{ .compatible = "qcom,sc8180x-mc-virt", .data = &sc8180x_mc_virt },
 	{ .compatible = "qcom,sc8180x-mmss-noc", .data = &sc8180x_mmss_noc },
 	{ .compatible = "qcom,sc8180x-system-noc", .data = &sc8180x_system_noc },
