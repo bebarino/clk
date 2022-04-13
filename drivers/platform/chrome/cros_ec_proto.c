@@ -833,6 +833,37 @@ bool cros_ec_check_features(struct cros_ec_dev *ec, int feature)
 EXPORT_SYMBOL_GPL(cros_ec_check_features);
 
 /**
+ * cros_ec_pchg_port_count() - Return the number of peripheral charger ports.
+ * @ec: EC device.
+ *
+ * Return: Number of peripheral charger ports, or 0 in case of error.
+ */
+unsigned int cros_ec_pchg_port_count(struct cros_ec_dev *ec)
+{
+	struct cros_ec_command *msg;
+	const struct ec_response_pchg_count *rsp;
+	struct cros_ec_device *ec_dev = ec->ec_dev;
+	int ret, count = 0;
+
+	msg = kzalloc(sizeof(*msg) + sizeof(*rsp), GFP_KERNEL);
+	if (!msg)
+		return 0;
+
+	msg->command = EC_CMD_PCHG_COUNT + ec->cmd_offset;
+	msg->insize = sizeof(*rsp);
+
+	ret = cros_ec_cmd_xfer_status(ec_dev, msg);
+	if (ret >= 0) {
+		rsp = (const struct ec_response_pchg_count *)msg->data;
+		count = rsp->port_count;
+	}
+	kfree(msg);
+
+	return count;
+}
+EXPORT_SYMBOL_GPL(cros_ec_pchg_port_count);
+
+/**
  * cros_ec_get_sensor_count() - Return the number of MEMS sensors supported.
  *
  * @ec: EC device, does not have to be connected directly to the AP,
