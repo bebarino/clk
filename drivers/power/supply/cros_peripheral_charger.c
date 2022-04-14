@@ -104,22 +104,6 @@ static bool cros_pchg_cmd_ver_check(const struct charger_data *charger)
 	return !!(rsp.version_mask & BIT(pchg_cmd_version));
 }
 
-static int cros_pchg_port_count(const struct charger_data *charger)
-{
-	struct ec_response_pchg_count rsp;
-	int ret;
-
-	ret = cros_pchg_ec_command(charger, 0, EC_CMD_PCHG_COUNT,
-				   NULL, 0, &rsp, sizeof(rsp));
-	if (ret < 0) {
-		dev_warn(charger->dev,
-			 "Unable to get number or ports (err:%d)\n", ret);
-		return ret;
-	}
-
-	return rsp.port_count;
-}
-
 static int cros_pchg_get_status(struct port_data *port)
 {
 	struct charger_data *charger = port->charger;
@@ -281,24 +265,13 @@ static int cros_pchg_probe(struct platform_device *pdev)
 	charger->ec_dev = ec_dev;
 	charger->ec_device = ec_device;
 
-	ret = cros_pchg_port_count(charger);
-	if (ret <= 0) {
-		/*
-		 * This feature is enabled by the EC and the kernel driver is
-		 * included by default for CrOS devices. Don't need to be loud
-		 * since this error can be normal.
-		 */
-		dev_info(dev, "No peripheral charge ports (err:%d)\n", ret);
-		return -ENODEV;
-	}
-
 	if (!cros_pchg_cmd_ver_check(charger)) {
 		dev_err(dev, "EC_CMD_PCHG version %d isn't available.\n",
 			pchg_cmd_version);
 		return -EOPNOTSUPP;
 	}
 
-	num_ports = ret;
+	num_ports = cros_ec_pchg_port_count(ec_dev);
 	if (num_ports > EC_PCHG_MAX_PORTS) {
 		dev_err(dev, "Too many peripheral charge ports (%d)\n",
 			num_ports);
