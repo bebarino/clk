@@ -132,23 +132,15 @@ static u32 dp_panel_get_supported_bpp(struct dp_panel *dp_panel,
 static int dp_panel_update_modes(struct drm_connector *connector,
 	struct edid *edid)
 {
-	int rc = 0;
+	int rc;
 
-	if (edid) {
-		rc = drm_connector_update_edid_property(connector, edid);
-		if (rc) {
-			DRM_ERROR("failed to update edid property %d\n", rc);
-			return rc;
-		}
-		rc = drm_add_edid_modes(connector, edid);
+	rc = drm_connector_update_edid_property(connector, edid);
+	if (rc) {
+		DRM_ERROR("failed to update edid property %d\n", rc);
 		return rc;
 	}
 
-	rc = drm_connector_update_edid_property(connector, NULL);
-	if (rc)
-		DRM_ERROR("failed to update edid property %d\n", rc);
-
-	return rc;
+	return drm_add_edid_modes(connector, edid);
 }
 
 void dp_panel_add_fail_safe_mode(struct drm_connector *connector)
