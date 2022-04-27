@@ -4837,7 +4837,7 @@ EXPORT_SYMBOL(drm_detect_hdmi_monitor);
  *
  * Return: True if the monitor supports audio, false otherwise.
  */
-bool drm_detect_monitor_audio(struct edid *edid)
+bool drm_detect_monitor_audio(const struct edid *edid)
 {
 	const u8 *edid_ext;
 	int i, j;

@@ -354,21 +354,19 @@ static int dp_display_send_hpd_notification(struct dp_display_private *dp,
 
 static int dp_display_process_hpd_high(struct dp_display_private *dp)
 {
-	int rc = 0;
-	struct edid *edid;
+	int rc;
+	const struct edid *edid;
 
 	dp->panel->max_dp_lanes = dp->parser->max_dp_lanes;
 
-	rc = dp_panel_read_sink_caps(dp->panel, dp->dp_display.connector);
-	if (rc)
-		goto end;
+	edid = dp_panel_read_sink_caps(dp->panel, dp->dp_display.connector);
+	if (IS_ERR(edid)) {
+		return PTR_ERR(edid);
 
 	dp_link_process_request(dp->link);
 
-	edid = dp->panel->edid;
-
 	dp->audio_supported = drm_detect_monitor_audio(edid);
-	dp_panel_handle_sink_request(dp->panel);
+	dp_panel_handle_sink_request(dp->panel, edid);
 
 	dp->dp_display.max_pclk_khz = DP_MAX_PIXEL_CLK_KHZ;
 	dp->dp_display.max_dp_lanes = dp->parser->max_dp_lanes;

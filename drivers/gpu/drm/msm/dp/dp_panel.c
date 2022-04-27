@@ -160,16 +160,17 @@ void dp_panel_add_fail_safe_mode(struct drm_connector *connector)
 	mutex_unlock(&connector->dev->mode_config.mutex);
 }
 
-int dp_panel_read_sink_caps(struct dp_panel *dp_panel,
+const struct edid *dp_panel_read_sink_caps(struct dp_panel *dp_panel,
 	struct drm_connector *connector)
 {
-	int rc = 0, bw_code;
+	int rc, bw_code;
 	int rlen, count;
 	struct dp_panel_private *panel;
+	struct edid *edid;
 
 	if (!dp_panel || !connector) {
 		DRM_ERROR("invalid input\n");
-		return -EINVAL;
+		return ERR_PTR(-EINVAL);
 	}
 
 	panel = container_of(dp_panel, struct dp_panel_private, dp_panel);
@@ -177,7 +178,7 @@ int dp_panel_read_sink_caps(struct dp_panel *dp_panel,
 	rc = dp_panel_read_dpcd(dp_panel);
 	if (rc) {
 		DRM_ERROR("read dpcd failed %d\n", rc);
-		return rc;
+		return ERR_PTR(rc);
 	}
 
 	bw_code = drm_dp_link_rate_to_bw_code(dp_panel->link_info.rate);
@@ -186,7 +187,7 @@ int dp_panel_read_sink_caps(struct dp_panel *dp_panel,
 			(bw_code > dp_panel->max_bw_code)) {
 		DRM_ERROR("Illegal link rate=%d lane=%d\n", dp_panel->link_info.rate,
 				dp_panel->link_info.num_lanes);
-		return -EINVAL;
+		return ERR_PTR(-EINVAL);
 	}
 
 	if (dp_panel->dfp_present) {
@@ -197,24 +198,17 @@ int dp_panel_read_sink_caps(struct dp_panel *dp_panel,
 			if (!count) {
 				DRM_ERROR("no downstream ports connected\n");
 				panel->link->sink_count = 0;
-				rc = -ENOTCONN;
-				goto end;
+				return ERR_PTR(-ENOTCONN);
 			}
 		}
 	}
 
-	kfree(dp_panel->edid);
-	dp_panel->edid = NULL;
-
-	dp_panel->edid = drm_get_edid(connector,
-					      &panel->aux->ddc);
-	if (!dp_panel->edid) {
+	edid = drm_get_edid(connector, &panel->aux->ddc);
+	if (!edid) {
 		DRM_ERROR("panel edid read failed\n");
 		/* check edid read fail is due to unplug */
-		if (!dp_catalog_link_is_connected(panel->catalog)) {
-			rc = -ETIMEDOUT;
-			goto end;
-		}
+		if (!dp_catalog_link_is_connected(panel->catalog))
+			return ERR_PTR(-ETIMEDOUT);
 
 		dp_panel_add_fail_safe_mode(connector);
 	}
@@ -227,12 +221,12 @@ int dp_panel_read_sink_caps(struct dp_panel *dp_panel,
 			!is_lane_count_valid(dp_panel->link_info.num_lanes)
 			|| (bw_code > dp_panel->max_bw_code)) {
 			DRM_ERROR("read dpcd failed %d\n", rc);
-			return rc;
+			return ERR_PTR(rc);
 		}
 		panel->aux_cfg_update_done = false;
 	}
-end:
-	return rc;
+
+	return edid;
 }
 
 u32 dp_panel_get_mode_bpp(struct dp_panel *dp_panel,
@@ -272,7 +266,7 @@ int dp_panel_get_modes(struct dp_panel *dp_panel,
 	return 0;
 }
 
-static u8 dp_panel_get_edid_checksum(struct edid *edid)
+static u8 dp_panel_get_edid_checksum(const struct edid *edid)
 {
 	struct edid *last_block;
 	u8 *raw_edid;
@@ -296,7 +290,8 @@ static u8 dp_panel_get_edid_checksum(struct edid *edid)
 	return 0;
 }
 
-void dp_panel_handle_sink_request(struct dp_panel *dp_panel)
+void dp_panel_handle_sink_request(struct dp_panel *dp_panel,
+				  const struct edid *edid)
 {
 	struct dp_panel_private *panel;
 
@@ -310,8 +305,8 @@ void dp_panel_handle_sink_request(struct dp_panel *dp_panel)
 	if (panel->link->sink_request & DP_TEST_LINK_EDID_READ) {
 		u8 checksum;
 
-		if (dp_panel->edid)
-			checksum = dp_panel_get_edid_checksum(dp_panel->edid);
+		if (edid)
+			checksum = dp_panel_get_edid_checksum(edid);
 		else
 			checksum = dp_panel->connector->real_edid_checksum;
 
