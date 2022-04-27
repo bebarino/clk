@@ -15,14 +15,20 @@ description: |
   Google's ChromeOS EC Keyboard is a simple matrix keyboard
   implemented on a separate EC (Embedded Controller) device. It provides
   a message for reading key scans from the EC. These are then converted
-  into keycodes for processing by the kernel.
+  into keycodes for processing by the kernel. This device also supports
+  switches/buttons like power and volume buttons.
 
 allOf:
   - $ref: "/schemas/input/matrix-keymap.yaml#"
 
 properties:
   compatible:
-    const: google,cros-ec-keyb
+    oneOf:
+      - items:
+          - const: google,cros-ec-keyb-switches
+          - const: google,cros-ec-keyb
+      - items:
+          - const: google,cros-ec-keyb
 
   google,needs-ghost-filter:
     description:
@@ -50,7 +56,7 @@ examples:
   - |
     #include <dt-bindings/input/input.h>
     cros-ec-keyb {
-        compatible = "google,cros-ec-keyb";
+        compatible = "google,cros-ec-keyb-switches", "google,cros-ec-keyb";
         keypad,num-rows = <8>;
         keypad,num-columns = <13>;
         google,needs-ghost-filter;
