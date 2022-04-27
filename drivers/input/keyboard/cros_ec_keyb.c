@@ -546,6 +546,14 @@ static int cros_ec_keyb_register_matrix(struct cros_ec_keyb *ckdev)
 	    !device_property_present(dev, "keypad,num-cols"))
 		return 0;
 
+	/*
+	 * Some devices only have switches but define keypad,num-{rows,cols} so
+	 * we add a more specific compatible in this situation indicating there
+	 * isn't a keyboard.
+	 */
+	if (of_device_is_compatible(dev->of_node, "google,cros-ec-keyb-switches"))
+		return 0;
+
 	err = matrix_keypad_parse_properties(dev, &ckdev->rows, &ckdev->cols);
 	if (err)
 		return err;
