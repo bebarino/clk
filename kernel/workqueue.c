@@ -448,6 +448,7 @@ static void show_one_worker_pool(struct worker_pool *pool);
 #ifdef CONFIG_DEBUG_OBJECTS_WORK
 
 static const struct debug_obj_descr work_debug_descr;
+static const struct debug_obj_descr delayed_work_debug_descr;
 
 static void *work_debug_hint(void *addr)
 {
@@ -479,6 +480,20 @@ static bool work_fixup_init(void *addr, enum debug_obj_state state)
 	}
 }
 
+static bool delayed_work_fixup_init(void *addr, enum debug_obj_state state)
+{
+	struct work_struct *work = addr;
+
+	switch (state) {
+	case ODEBUG_STATE_ACTIVE:
+		cancel_delayed_work_sync(to_delayed_work(work));
+		debug_object_init(work, &delayed_work_debug_descr);
+		return true;
+	default:
+		return false;
+	}
+}
+
 /*
  * fixup_free is called when:
  * - an active object is freed
@@ -497,6 +512,20 @@ static bool work_fixup_free(void *addr, enum debug_obj_state state)
 	}
 }
 
+static bool delayed_work_fixup_free(void *addr, enum debug_obj_state state)
+{
+	struct work_struct *work = addr;
+
+	switch (state) {
+	case ODEBUG_STATE_ACTIVE:
+		cancel_delayed_work_sync(to_delayed_work(work));
+		debug_object_free(work, &delayed_work_debug_descr);
+		return true;
+	default:
+		return false;
+	}
+}
+
 static const struct debug_obj_descr work_debug_descr = {
 	.name		= "work_struct",
 	.debug_hint	= work_debug_hint,
@@ -505,9 +534,22 @@ static const struct debug_obj_descr work_debug_descr = {
 	.fixup_free	= work_fixup_free,
 };
 
+static const struct debug_obj_descr delayed_work_debug_descr = {
+	.name		= "delayed_work_struct",
+	.debug_hint	= work_debug_hint,
+	.is_static_object = work_is_static_object,
+	.fixup_init	= delayed_work_fixup_init,
+	.fixup_free	= delayed_work_fixup_free,
+};
+
 static inline void debug_work_activate(struct work_struct *work)
 {
 	debug_object_activate(work, &work_debug_descr);
+}
+
+static inline void debug_delayed_work_activate(struct delayed_work *dwork)
+{
+	debug_object_activate(&dwork->work, &delayed_work_debug_descr);
 }
 
 static inline void debug_work_deactivate(struct work_struct *work)
@@ -515,14 +557,33 @@ static inline void debug_work_deactivate(struct work_struct *work)
 	debug_object_deactivate(work, &work_debug_descr);
 }
 
-void __init_work(struct work_struct *work, int onstack)
+static inline void debug_delayed_work_deactivate(struct delayed_work *dwork)
 {
+	debug_object_deactivate(&dwork->work, &delayed_work_debug_descr);
+}
+
+void __init_work(struct work_struct *work, int onstack, bool is_dwork)
+{
+	const struct debug_obj_descr *debug_descr = &work_debug_descr;
+
+	if (is_dwork)
+		debug_descr = &delayed_work_debug_descr;
+
 	if (onstack)
-		debug_object_init_on_stack(work, &work_debug_descr);
+		debug_object_init_on_stack(work, debug_descr);
 	else
-		debug_object_init(work, &work_debug_descr);
+		debug_object_init(work, debug_descr);
 }
 EXPORT_SYMBOL_GPL(__init_work);
+
+static inline void debug_delayed_work_to_work(struct delayed_work *dwork)
+{
+	struct work_struct *work = &dwork->work;
+
+	debug_delayed_work_deactivate(dwork);
+	/* Reinitialize delayed work as plain work debug object */
+	__init_work(work, object_is_on_stack(work), 0);
+}
 
 void destroy_work_on_stack(struct work_struct *work)
 {
@@ -533,13 +594,15 @@ EXPORT_SYMBOL_GPL(destroy_work_on_stack);
 void destroy_delayed_work_on_stack(struct delayed_work *work)
 {
 	destroy_timer_on_stack(&work->timer);
-	debug_object_free(&work->work, &work_debug_descr);
+	debug_object_free(&work->work, &delayed_work_debug_descr);
 }
 EXPORT_SYMBOL_GPL(destroy_delayed_work_on_stack);
 
 #else
 static inline void debug_work_activate(struct work_struct *work) { }
+static inline void debug_delayed_work_activate(struct delayed_work *dwork) { }
 static inline void debug_work_deactivate(struct work_struct *work) { }
+static inline void debug_delayed_work_to_work(struct delayed_work *dwork) { }
 #endif
 
 /**
@@ -1272,8 +1335,10 @@ static int try_to_grab_pending(struct work_struct *work, bool is_dwork,
 		 * guaranteed that the timer is not queued anywhere and not
 		 * running on the local CPU.
 		 */
-		if (likely(del_timer(&dwork->timer)))
+		if (likely(del_timer(&dwork->timer))) {
+			debug_delayed_work_to_work(dwork);
 			return 1;
+		}
 	}
 
 	/* try to claim PENDING the normal way */
@@ -1640,6 +1705,7 @@ void delayed_work_timer_fn(struct timer_list *t)
 	struct delayed_work *dwork = from_timer(dwork, t, timer);
 
 	/* should have been called from irqsafe timer with irq already off */
+	debug_delayed_work_to_work(dwork);
 	__queue_work(dwork->cpu, dwork->wq, &dwork->work);
 }
 EXPORT_SYMBOL(delayed_work_timer_fn);
@@ -1666,6 +1732,7 @@ static void __queue_delayed_work(int cpu, struct workqueue_struct *wq,
 		return;
 	}
 
+	debug_delayed_work_activate(dwork);
 	dwork->wq = wq;
 	dwork->cpu = cpu;
 	timer->expires = jiffies + delay;
@@ -3214,8 +3281,10 @@ EXPORT_SYMBOL_GPL(cancel_work_sync);
 bool flush_delayed_work(struct delayed_work *dwork)
 {
 	local_irq_disable();
-	if (del_timer_sync(&dwork->timer))
+	if (del_timer_sync(&dwork->timer)) {
+		debug_delayed_work_to_work(dwork);
 		__queue_work(dwork->cpu, dwork->wq, &dwork->work);
+	}
 	local_irq_enable();
 	return flush_work(&dwork->work);
 }

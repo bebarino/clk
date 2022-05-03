@@ -199,7 +199,7 @@ struct execute_work {
 	struct delayed_work n = __DELAYED_WORK_INITIALIZER(n, f, TIMER_DEFERRABLE)
 
 #ifdef CONFIG_DEBUG_OBJECTS_WORK
-extern void __init_work(struct work_struct *work, int onstack);
+extern void __init_work(struct work_struct *work, int onstack, bool is_dwork);
 extern void destroy_work_on_stack(struct work_struct *work);
 extern void destroy_delayed_work_on_stack(struct delayed_work *work);
 static inline unsigned int work_static(struct work_struct *work)
@@ -207,7 +207,7 @@ static inline unsigned int work_static(struct work_struct *work)
 	return *work_data_bits(work) & WORK_STRUCT_STATIC;
 }
 #else
-static inline void __init_work(struct work_struct *work, int onstack) { }
+static inline void __init_work(struct work_struct *work, int onstack, bool is_dwork) { }
 static inline void destroy_work_on_stack(struct work_struct *work) { }
 static inline void destroy_delayed_work_on_stack(struct delayed_work *work) { }
 static inline unsigned int work_static(struct work_struct *work) { return 0; }
@@ -221,20 +221,20 @@ static inline unsigned int work_static(struct work_struct *work) { return 0; }
  * to generate better code.
  */
 #ifdef CONFIG_LOCKDEP
-#define __INIT_WORK(_work, _func, _onstack)				\
+#define __INIT_WORK(_work, _func, _onstack, _dwork)			\
 	do {								\
 		static struct lock_class_key __key;			\
 									\
-		__init_work((_work), _onstack);				\
+		__init_work((_work), _onstack, _dwork);			\
 		(_work)->data = (atomic_long_t) WORK_DATA_INIT();	\
 		lockdep_init_map(&(_work)->lockdep_map, "(work_completion)"#_work, &__key, 0); \
 		INIT_LIST_HEAD(&(_work)->entry);			\
 		(_work)->func = (_func);				\
 	} while (0)
 #else
-#define __INIT_WORK(_work, _func, _onstack)				\
+#define __INIT_WORK(_work, _func, _onstack, _dwork)			\
 	do {								\
-		__init_work((_work), _onstack);				\
+		__init_work((_work), _onstack, _dwork);			\
 		(_work)->data = (atomic_long_t) WORK_DATA_INIT();	\
 		INIT_LIST_HEAD(&(_work)->entry);			\
 		(_work)->func = (_func);				\
@@ -242,14 +242,14 @@ static inline unsigned int work_static(struct work_struct *work) { return 0; }
 #endif
 
 #define INIT_WORK(_work, _func)						\
-	__INIT_WORK((_work), (_func), 0)
+	__INIT_WORK((_work), (_func), 0, false)
 
 #define INIT_WORK_ONSTACK(_work, _func)					\
-	__INIT_WORK((_work), (_func), 1)
+	__INIT_WORK((_work), (_func), 1, false)
 
 #define __INIT_DELAYED_WORK(_work, _func, _tflags)			\
 	do {								\
-		INIT_WORK(&(_work)->work, (_func));			\
+		__INIT_WORK(&(_work)->work, (_func), 0, true);		\
 		__init_timer(&(_work)->timer,				\
 			     delayed_work_timer_fn,			\
 			     (_tflags) | TIMER_IRQSAFE);		\
@@ -257,7 +257,7 @@ static inline unsigned int work_static(struct work_struct *work) { return 0; }
 
 #define __INIT_DELAYED_WORK_ONSTACK(_work, _func, _tflags)		\
 	do {								\
-		INIT_WORK_ONSTACK(&(_work)->work, (_func));		\
+		__INIT_WORK(&(_work)->work, (_func), 1, true);		\
 		__init_timer_on_stack(&(_work)->timer,			\
 				      delayed_work_timer_fn,		\
 				      (_tflags) | TIMER_IRQSAFE);	\
