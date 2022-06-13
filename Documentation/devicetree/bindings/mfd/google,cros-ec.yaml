@@ -269,23 +269,4 @@ examples:
             compatible = "google,cros-ec-rpmsg";
         };
     };
-
-  # Example for FPMCU
-  - |
-    #include <dt-bindings/interrupt-controller/irq.h>
-    #include <dt-bindings/gpio/gpio.h>
-    spi {
-      #address-cells = <0x1>;
-      #size-cells = <0x0>;
-      ec@f {
-        compatible = "google,cros-ec-fp", "google,cros-ec-spi";
-        reg = <0xf>;
-        interrupt-parent = <&gpio_controller>;
-        interrupts = <4 IRQ_TYPE_LEVEL_LOW>;
-        spi-max-frequency = <3000000>;
-        reset-gpios = <&gpio_controller 5 GPIO_ACTIVE_LOW>;
-        boot0-gpios = <&gpio_controller 10 GPIO_ACTIVE_HIGH>;
-        vdd-supply = <&pp3300_fp_mcu>;
-      };
-    };
 ...
