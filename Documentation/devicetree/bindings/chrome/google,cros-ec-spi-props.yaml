@@ -4,7 +4,7 @@
 $id: http://devicetree.org/schemas/chrome/google,cros-ec-spi-props.yaml#
 $schema: http://devicetree.org/meta-schemas/core.yaml#
 
-title: Properties for Google's ChromeOS EC connected over SPI
+title: Properties for Google's ChromeOS EC connected through SPI
 
 maintainers:
   - Benson Leung <bleung@chromium.org>
@@ -31,6 +31,6 @@ properties:
     default: 0
 
 allOf:
-  - $ref: /schemas/spi/spi-peripheral-props.yaml#
+  - $ref: "/schemas/spi/spi-peripheral-props.yaml#"
 
 additionalProperties: true

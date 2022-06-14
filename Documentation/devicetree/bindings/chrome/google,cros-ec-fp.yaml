@@ -23,7 +23,7 @@ select:
     - compatible
 
 allOf:
-  - $ref: google,cros-ec-spi-props.yaml#
+  - $ref: "/schemas/chrome/google,cros-ec-spi-props.yaml#"
 
 properties:
   compatible:

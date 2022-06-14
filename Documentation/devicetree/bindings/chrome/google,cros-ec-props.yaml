@@ -1,0 +1,100 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/chrome/google,cros-ec-props.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Properties for Google's ChromeOS Embedded Controller
+
+maintainers:
+  - Benson Leung <bleung@chromium.org>
+  - Guenter Roeck <groeck@chromium.org>
+
+description:
+  Google's ChromeOS Embedded Controll (cros_ec) is a microcontroller which
+  talks to the AP and implements various functions such as keyboard and battery
+  charging. These are the common properties for cros_ec nodes.
+
+properties:
+  google,has-vbc-nvram:
+    description:
+      Some implementations of the EC include a small nvram space used to
+      store verified boot context data. This boolean flag is used to specify
+      whether this nvram is present or not.
+    type: boolean
+
+  wakeup-source:
+    description: Button can wake-up the system.
+
+  '#address-cells':
+    const: 1
+
+  '#size-cells':
+    const: 0
+
+  typec:
+    $ref: "/schemas/chrome/google,cros-ec-typec.yaml#"
+
+  ec-pwm:
+    $ref: "/schemas/pwm/google,cros-ec-pwm.yaml#"
+    deprecated: true
+
+  pwm:
+    $ref: "/schemas/pwm/google,cros-ec-pwm.yaml#"
+
+  keyboard-controller:
+    $ref: "/schemas/input/google,cros-ec-keyb.yaml#"
+
+  proximity:
+    $ref: "/schemas/iio/proximity/google,cros-ec-mkbp-proximity.yaml#"
+
+  codecs:
+    type: object
+    additionalProperties: false
+
+    properties:
+      '#address-cells':
+        const: 2
+
+      '#size-cells':
+        const: 1
+
+    patternProperties:
+      "^ec-codec@[a-f0-9]+$":
+        type: object
+        $ref: "/schemas/sound/google,cros-ec-codec.yaml#"
+
+    required:
+      - "#address-cells"
+      - "#size-cells"
+
+  cbas:
+    type: object
+
+    description:
+      This device is used to signal when a detachable base is attached
+      to a Chrome OS tablet. This device cannot be detected at runtime.
+
+    properties:
+      compatible:
+        const: google,cros-cbas
+
+    required:
+      - compatible
+
+    additionalProperties: false
+
+patternProperties:
+  "^i2c-tunnel[0-9]*$":
+    type: object
+    $ref: "/schemas/i2c/google,cros-ec-i2c-tunnel.yaml#"
+
+  "^regulator@[0-9]+$":
+    type: object
+    $ref: "/schemas/regulator/google,cros-ec-regulator.yaml#"
+
+  "^extcon[0-9]*$":
+    type: object
+    $ref: "/schemas/extcon/extcon-usbc-cros-ec.yaml#"
+
+additionalProperties: true

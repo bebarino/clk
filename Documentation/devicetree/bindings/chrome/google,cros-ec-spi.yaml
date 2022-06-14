@@ -1,0 +1,61 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/chrome/google,cros-ec-spi.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: ChromeOS Embedded Controller connected through SPI
+
+maintainers:
+  - Benson Leung <bleung@chromium.org>
+  - Guenter Roeck <groeck@chromium.org>
+
+description:
+  Google's ChromeOS EC is a microcontroller which talks to the AP and
+  implements various functions such as keyboard and battery charging.
+
+allOf:
+  - $ref: "/schemas/chrome/google,cros-ec-spi-props.yaml#"
+  - $ref: "/schemas/chrome/google,cros-ec-props.yaml#"
+
+properties:
+  compatible:
+    const: google,cros-ec-spi
+
+  interrupts:
+    maxItems: 1
+
+required:
+  - compatible
+  - reg
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/gpio/gpio.h>
+    #include <dt-bindings/interrupt-controller/irq.h>
+
+    spi0 {
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        cros-ec@0 {
+            compatible = "google,cros-ec-spi";
+            reg = <0x0>;
+            spi-tx-delay-us = <3>;
+            google,cros-ec-spi-msg-delay = <3>;
+            google,cros-ec-spi-pre-delay = <10>;
+            interrupts = <99 0>;
+            interrupt-parent = <&gpio7>;
+            spi-max-frequency = <5000000>;
+
+            proximity {
+                compatible = "google,cros-ec-mkbp-proximity";
+            };
+
+            cbas {
+                compatible = "google,cros-cbas";
+            };
+        };
+    };
