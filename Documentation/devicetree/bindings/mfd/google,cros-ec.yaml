@@ -23,34 +23,11 @@ properties:
           For implementations of the EC connected through I2C.
         const: google,cros-ec-i2c
       - description:
-          For implementations of the FPMCU connected through SPI.
-        items:
-          - const: google,cros-ec-fp
-          - const: google,cros-ec-spi
-      - description:
           For implementations of the EC connected through SPI.
         const: google,cros-ec-spi
       - description:
           For implementations of the EC connected through RPMSG.
         const: google,cros-ec-rpmsg
-
-  controller-data:
-    description:
-      SPI controller data, see bindings/spi/samsung,spi-peripheral-props.yaml
-    type: object
-
-  google,cros-ec-spi-pre-delay:
-    description:
-      This property specifies the delay in usecs between the
-      assertion of the CS and the first clock pulse.
-    $ref: /schemas/types.yaml#/definitions/uint32
-    default: 0
-
-  google,cros-ec-spi-msg-delay:
-    description:
-      This property specifies the delay in usecs between messages.
-    $ref: /schemas/types.yaml#/definitions/uint32
-    default: 0
 
   google,has-vbc-nvram:
     description:
@@ -66,9 +43,6 @@ properties:
       device. Used to match the subnode to the rpmsg device announced by
       the SCP.
     $ref: "/schemas/types.yaml#/definitions/string"
-
-  spi-max-frequency:
-    description: Maximum SPI frequency of the device in Hz.
 
   reg:
     maxItems: 1
@@ -166,17 +140,10 @@ allOf:
   - if:
       properties:
         compatible:
-          not:
-            contains:
-              const: google,cros-ec-spi
+          contains:
+            const: google,cros-ec-spi
     then:
-      properties:
-        controller-data: false
-        google,cros-ec-spi-pre-delay: false
-        google,cros-ec-spi-msg-delay: false
-        spi-max-frequency: false
-    else:
-      $ref: /schemas/spi/spi-peripheral-props.yaml
+      $ref: /schemas/chrome/google,cros-ec-spi-props.yaml#
 
   - if:
       properties:
@@ -191,28 +158,6 @@ allOf:
       required:
         - reg
         - interrupts
-
-  - if:
-      properties:
-        compatible:
-          contains:
-            const: google,cros-ec-fp
-    then:
-      properties:
-        reset-gpios: true
-        boot0-gpios: true
-        vdd-supply: true
-      additionalProperties: false
-
-      required:
-        - reset-gpios
-        - boot0-gpios
-        - vdd-supply
-    else:
-      properties:
-        reset-gpios: false
-        boot0-gpios: false
-        vdd-supply: false
 
 additionalProperties: false
 
@@ -246,6 +191,7 @@ examples:
         cros-ec@0 {
             compatible = "google,cros-ec-spi";
             reg = <0x0>;
+            spi-tx-delay-us = <3>;
             google,cros-ec-spi-msg-delay = <30>;
             google,cros-ec-spi-pre-delay = <10>;
             interrupts = <99 0>;
