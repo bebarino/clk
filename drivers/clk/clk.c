@@ -4344,6 +4344,7 @@ void clk_unregister(struct clk *clk)
 		pr_warn("%s: unregistering protected clock: %s\n",
 					__func__, clk->core->name);
 
+	clk_core_unlink_consumer(clk);
 	kref_put(&clk->core->ref, __clk_release);
 	free_clk(clk);
 unlock:
