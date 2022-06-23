@@ -1996,6 +1996,47 @@ static void __clk_set_parent_after(struct clk_core *core,
 	}
 }
 
+static void clk_core_free_parent_map(struct clk_core *core)
+{
+	int i = core->num_parents;
+
+	if (!core->num_parents)
+		return;
+
+	while (--i >= 0) {
+		kfree_const(core->parents[i].name);
+		kfree_const(core->parents[i].fw_name);
+	}
+
+	kfree(core->parents);
+}
+
+/* Free memory allocated for a clock. */
+static void __clk_release(struct kref *ref)
+{
+	struct clk_core *core = container_of(ref, struct clk_core, ref);
+
+	lockdep_assert_held(&prepare_lock);
+
+	if (core->parent)
+		kref_put(&core->parent->ref, __clk_release);
+
+	clk_core_free_parent_map(core);
+	kfree_const(core->name);
+	kfree(core);
+}
+
+/* deal with new, old parent references */
+static void __clk_reparent_refs_update(struct clk_core *new_parent,
+				       struct clk_core *old_parent)
+{
+	if (new_parent)
+		kref_get(&new_parent->ref);
+
+	if (old_parent)
+		kref_put(&old_parent->ref, __clk_release);
+}
+
 static int __clk_set_parent(struct clk_core *core, struct clk_core *parent,
 			    u8 p_index)
 {
@@ -2024,6 +2065,7 @@ static int __clk_set_parent(struct clk_core *core, struct clk_core *parent,
 	}
 
 	__clk_set_parent_after(core, parent, old_parent);
+	__clk_reparent_refs_update(parent, old_parent);
 
 	return 0;
 }
@@ -2260,6 +2302,7 @@ static void clk_change_rate(struct clk_core *core)
 
 		trace_clk_set_parent_complete(core, core->new_parent);
 		__clk_set_parent_after(core, core->new_parent, old_parent);
+		__clk_reparent_refs_update(core->new_parent, old_parent);
 	}
 
 	if (core->flags & CLK_OPS_PARENT_ENABLE)
@@ -3624,6 +3667,7 @@ static void clk_core_reparent_orphans_nolock(void)
 			/* update the clk tree topology */
 			__clk_set_parent_before(orphan, parent);
 			__clk_set_parent_after(orphan, parent, NULL);
+			__clk_reparent_refs_update(parent, NULL);
 			__clk_recalc_accuracies(orphan);
 			__clk_recalc_rates(orphan, true, 0);
 
@@ -3746,6 +3790,7 @@ static int __clk_core_init(struct clk_core *core)
 	if (parent) {
 		hlist_add_head(&core->child_node, &parent->children);
 		core->orphan = parent->orphan;
+		kref_get(&parent->ref);
 	} else if (!core->num_parents) {
 		hlist_add_head(&core->child_node, &clk_root_list);
 		core->orphan = false;
@@ -3824,9 +3869,13 @@ static int __clk_core_init(struct clk_core *core)
 		}
 	}
 
-	clk_core_reparent_orphans_nolock();
-
+	/*
+	 * Some orphan might be reparented to us grabbing a reference. Hence,
+	 * this has to be initialized now.
+	 */
 	kref_init(&core->ref);
+
+	clk_core_reparent_orphans_nolock();
 out:
 	clk_pm_runtime_put(core);
 unlock:
@@ -4040,21 +4089,6 @@ static int clk_core_populate_parent_map(struct clk_core *core,
 	return 0;
 }
 
-static void clk_core_free_parent_map(struct clk_core *core)
-{
-	int i = core->num_parents;
-
-	if (!core->num_parents)
-		return;
-
-	while (--i >= 0) {
-		kfree_const(core->parents[i].name);
-		kfree_const(core->parents[i].fw_name);
-	}
-
-	kfree(core->parents);
-}
-
 static struct clk *
 __clk_register(struct device *dev, struct device_node *np, struct clk_hw *hw)
 {
@@ -4213,18 +4247,6 @@ int of_clk_hw_register(struct device_node *node, struct clk_hw *hw)
 	return PTR_ERR_OR_ZERO(__clk_register(NULL, node, hw));
 }
 EXPORT_SYMBOL_GPL(of_clk_hw_register);
-
-/* Free memory allocated for a clock. */
-static void __clk_release(struct kref *ref)
-{
-	struct clk_core *core = container_of(ref, struct clk_core, ref);
-
-	lockdep_assert_held(&prepare_lock);
-
-	clk_core_free_parent_map(core);
-	kfree_const(core->name);
-	kfree(core);
-}
 
 /*
  * Empty clk_ops for unregistered clocks. These are used temporarily
