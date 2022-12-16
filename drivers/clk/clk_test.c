@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
- * Kunit test for clk rate management
+ * Kunit test for common clk framework
  */
 #include <linux/clk.h>
 #include <linux/clk-provider.h>
@@ -2392,6 +2392,104 @@ static struct kunit_suite clk_mux_notifier_test_suite = {
 	.init = clk_mux_notifier_test_init,
 	.exit = clk_mux_notifier_test_exit,
 	.test_cases = clk_mux_notifier_test_cases,
+};
+
+static int clk_parent_test_init(struct kunit *test)
+{
+	struct clk_parent_ctx *ctx;
+	const char *top_parents[2] = { "parent-0", "parent-1" };
+	int ret;
+
+	ctx = kunit_kzalloc(test, sizeof(*ctx), GFP_KERNEL);
+	if (!ctx)
+		return -ENOMEM;
+	test->priv = ctx;
+
+	ctx->mux_ctx.parents_ctx[0].hw.init = CLK_HW_INIT_NO_PARENT("parent-0",
+								    &clk_dummy_rate_ops,
+								    0);
+	ctx->mux_ctx.parents_ctx[0].rate = DUMMY_CLOCK_RATE_1;
+	ret = clk_hw_register(NULL, &ctx->mux_ctx.parents_ctx[0].hw);
+	if (ret)
+		return ret;
+
+	ctx->mux_ctx.parents_ctx[1].hw.init = CLK_HW_INIT_NO_PARENT("parent-1",
+								    &clk_dummy_rate_ops,
+								    0);
+	ctx->mux_ctx.parents_ctx[1].rate = DUMMY_CLOCK_RATE_2;
+	ret = clk_hw_register(NULL, &ctx->mux_ctx.parents_ctx[1].hw);
+	if (ret)
+		return ret;
+
+	ctx->mux_ctx.current_parent = 0;
+	ctx->mux_ctx.hw.init = CLK_HW_INIT_PARENTS("test-mux", top_parents,
+						   &clk_multiple_parents_mux_ops,
+						   0);
+	ret = clk_hw_register(NULL, &ctx->mux_ctx.hw);
+	if (ret)
+		return ret;
+
+	ctx->clk = clk_hw_get_clk(&ctx->mux_ctx.hw, NULL);
+
+	return 0;
+}
+
+static void clk_mux_notifier_test_exit(struct kunit *test)
+{
+	struct clk_parent_ctx *ctx = test->priv;
+	struct clk *clk = ctx->clk;
+
+	clk_put(clk);
+
+	clk_hw_unregister(&ctx->mux_ctx.hw);
+	clk_hw_unregister(&ctx->mux_ctx.parents_ctx[0].hw);
+	clk_hw_unregister(&ctx->mux_ctx.parents_ctx[1].hw);
+}
+
+/*
+ * Test that if the we have a notifier registered on a mux, the core
+ * will notify us when we switch to another parent, and with the proper
+ * old and new rates.
+ */
+static void clk_mux_notifier_set_parent_test(struct kunit *test)
+{
+	struct clk_mux_notifier_ctx *ctx = test->priv;
+	struct clk_hw *hw = &ctx->mux_ctx.hw;
+	struct clk *clk = clk_hw_get_clk(hw, "test");
+	struct clk *new_parent = clk_hw_get_clk(&ctx->mux_ctx.parents_ctx[1].hw, "new_parent");
+	int ret;
+
+}
+
+static struct kunit_case clk_parent_test_cases[] = {
+	KUNIT_CASE(clk_parent_set_invalid_parent_test),
+	KUNIT_CASE(clk_parent_get_invalid_parent_test),
+	KUNIT_CASE(clk_parent_get_deferred_parent_test),
+	KUNIT_CASE(clk_parent_get_never_parent_test),
+	KUNIT_CASE(clk_parent_set_parent_test),
+	KUNIT_CASE(clk_parent_get_parent_test),
+	KUNIT_CASE(clk_parent_has_parent_test),
+	KUNIT_CASE(clk_parent_has_parent_NULL_test),
+	KUNIT_CASE(clk_parent_not_has_parent_test),
+	KUNIT_CASE(clk_parent_hw_get_num_parents_test),
+	KUNIT_CASE(clk_parent_hw_get_parent_test),
+	KUNIT_CASE(clk_parent_hw_get_parent_orphan_test),
+	KUNIT_CASE(clk_parent_hw_get_parent_by_index_test),
+	KUNIT_CASE(clk_parent_hw_get_parent_by_index_invalid_test),
+	KUNIT_CASE(clk_parent_hw_get_parent_index_test),
+	KUNIT_CASE(clk_parent_hw_get_parent_index_invalid_test),
+	{}
+};
+
+/*
+ * Test suite for clk_{set,get}_parent() consumer API, clk_hw parent based APIs and
+ * struct clk_ops::get_parent{_hw} APIs 
+ */
+static struct kunit_suite clk_parent_test_suite = {
+	.name = "clk-parent",
+	.init = clk_parent_test_init,
+	.exit = clk_parent_test_exit,
+	.test_cases = clk_parent_test_cases,
 };
 
 kunit_test_suites(
