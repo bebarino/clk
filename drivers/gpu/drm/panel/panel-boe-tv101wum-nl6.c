@@ -1193,13 +1193,10 @@ static int boe_panel_enter_sleep_mode(struct boe_panel *boe)
 	return 0;
 }
 
-static int boe_panel_unprepare(struct drm_panel *panel)
+static int boe_panel_disable(struct drm_panel *panel)
 {
 	struct boe_panel *boe = to_boe_panel(panel);
 	int ret;
-
-	if (!boe->prepared)
-		return 0;
 
 	ret = boe_panel_enter_sleep_mode(boe);
 	if (ret < 0) {
@@ -1208,6 +1205,16 @@ static int boe_panel_unprepare(struct drm_panel *panel)
 	}
 
 	msleep(150);
+
+	return 0;
+}
+
+static int boe_panel_unprepare(struct drm_panel *panel)
+{
+	struct boe_panel *boe = to_boe_panel(panel);
+
+	if (!boe->prepared)
+		return 0;
 
 	if (boe->desc->discharge_on_disable) {
 		regulator_disable(boe->avee);
@@ -1269,18 +1276,10 @@ static int boe_panel_prepare(struct drm_panel *panel)
 	gpiod_set_value(boe->enable_gpio, 1);
 	usleep_range(6000, 10000);
 
-	ret = boe_panel_init_dcs_cmd(boe);
-	if (ret < 0) {
-		dev_err(panel->dev, "failed to init panel: %d\n", ret);
-		goto poweroff;
-	}
-
 	boe->prepared = true;
 
 	return 0;
 
-poweroff:
-	regulator_disable(boe->avee);
 poweroffavdd:
 	regulator_disable(boe->avdd);
 poweroff1v8:
@@ -1293,7 +1292,15 @@ poweroff1v8:
 
 static int boe_panel_enable(struct drm_panel *panel)
 {
+	struct boe_panel *boe = to_boe_panel(panel);
+	int ret;
+
+	ret = boe_panel_init_dcs_cmd(boe);
+	if (ret < 0)
+		dev_err(panel->dev, "failed to init panel: %d\n", ret);
+
 	msleep(130);
+
 	return 0;
 }
 
@@ -1528,6 +1535,7 @@ static enum drm_panel_orientation boe_panel_get_orientation(struct drm_panel *pa
 }
 
 static const struct drm_panel_funcs boe_panel_funcs = {
+	.disable = boe_panel_disable,
 	.unprepare = boe_panel_unprepare,
 	.prepare = boe_panel_prepare,
 	.enable = boe_panel_enable,
