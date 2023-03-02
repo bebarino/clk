@@ -1,0 +1,30 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/test/test,empty.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Empty node
+
+maintainers:
+  - David Gow <davidgow@google.com>
+  - Brendan Higgins <brendanhiggins@google.com>
+
+description:
+  An empty node to confirm tests can load device tree overlays.
+
+properties:
+  compatible:
+    const: test,empty
+
+required:
+  - compatible
+
+additionalProperties: false
+
+examples:
+  - |
+    kunit-node {
+      compatible = "test,empty";
+    };
+...
