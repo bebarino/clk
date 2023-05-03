@@ -196,6 +196,10 @@ void devres_close_group(struct device *dev, void *id);
 void devres_remove_group(struct device *dev, void *id);
 int devres_release_group(struct device *dev, void *id);
 
+/* devres bus group */
+int __must_check devres_open_bus_group(struct device *dev, gfp_t gfp);
+int devres_release_bus_group(struct device *dev);
+
 /* managed devm_k.alloc/kfree for device drivers */
 void *devm_kmalloc(struct device *dev, size_t size, gfp_t gfp) __alloc_size(2);
 void *devm_krealloc(struct device *dev, void *ptr, size_t size,

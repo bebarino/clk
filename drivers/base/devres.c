@@ -575,6 +575,25 @@ void * devres_open_group(struct device *dev, void *id, gfp_t gfp)
 }
 EXPORT_SYMBOL_GPL(devres_open_group);
 
+/**
+ * devres_open_bus_group - Open a new devres group for dev's bus_type
+ * @dev: Device to open devres group for
+ * @gfp: Allocation flags
+ *
+ * Open a new devres group for @dev with an id for the bus_type list of the
+ * device.
+ *
+ * Returns: 0 on success, -ENOMEM on allocation failure.
+ */
+int devres_open_bus_group(struct device *dev, gfp_t gfp)
+{
+	if (!devres_open_group(dev, &dev->p->knode_bus, gfp))
+		return -ENOMEM;
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(devres_open_bus_group);
+
 /* Find devres group with ID @id.  If @id is NULL, look for the latest. */
 static struct devres_group * find_group(struct device *dev, void *id)
 {
@@ -694,6 +713,18 @@ int devres_release_group(struct device *dev, void *id)
 	return cnt;
 }
 EXPORT_SYMBOL_GPL(devres_release_group);
+
+/**
+ * devres_release_bus_group - Release resources for @dev's bus_type devres group
+ * @dev: Device to release group for
+ *
+ * Remove the group for @dev related to the bus_type of the device.
+ */
+int devres_release_bus_group(struct device *dev)
+{
+	return devres_release_group(dev, &dev->p->knode_bus);
+}
+EXPORT_SYMBOL_GPL(devres_release_bus_group);
 
 /*
  * Custom devres actions allow inserting a simple function call
