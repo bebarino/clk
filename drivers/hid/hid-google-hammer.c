@@ -495,11 +495,6 @@ out:
 	kfree(buf);
 }
 
-static void hammer_stop(void *hdev)
-{
-	hid_hw_stop(hdev);
-}
-
 static int hammer_probe(struct hid_device *hdev,
 			const struct hid_device_id *id)
 {
@@ -520,10 +515,6 @@ static int hammer_probe(struct hid_device *hdev,
 	if (error)
 		return error;
 
-	error = devm_add_action(&hdev->dev, hammer_stop, hdev);
-	if (error)
-		return error;
-
 	/*
 	 * We always want to poll for, and handle tablet mode events from
 	 * devices that have folded usage, even when nobody has opened the input
@@ -533,8 +524,10 @@ static int hammer_probe(struct hid_device *hdev,
 	if (hammer_has_folded_event(hdev)) {
 		hdev->quirks |= HID_QUIRK_ALWAYS_POLL;
 		error = hid_hw_open(hdev);
-		if (error)
+		if (error) {
+			hid_hw_stop(hdev);
 			return error;
+		}
 
 		hammer_get_folded_state(hdev);
 	}
@@ -576,7 +569,8 @@ static void hammer_remove(struct hid_device *hdev)
 		spin_unlock_irqrestore(&cbas_ec_lock, flags);
 	}
 
-	/* Unregistering LEDs and stopping the hardware is done via devm */
+	/* Unregistering LEDs is done via devm */
+	hid_hw_stop(hdev);
 }
 
 static const struct hid_device_id hammer_devices[] = {
