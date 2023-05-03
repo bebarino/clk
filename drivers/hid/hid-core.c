@@ -2629,6 +2629,11 @@ static int hid_device_probe(struct device *dev)
 		/* reset the quirks that has been previously set */
 		hdev->quirks = hid_lookup_quirk(hdev);
 		hdev->driver = hdrv;
+
+		ret = devres_open_bus_group(dev, GFP_KERNEL);
+		if (ret)
+			goto unlock;
+
 		if (hdrv->probe) {
 			ret = hdrv->probe(hdev, id);
 		} else { /* default probe */
@@ -2636,7 +2641,15 @@ static int hid_device_probe(struct device *dev)
 			if (!ret)
 				ret = hid_hw_start(hdev, HID_CONNECT_DEFAULT);
 		}
+		/*
+		 * Note that we are not closing the devres group opened above
+		 * so even resources that were attached to the device after
+		 * probe is run are released when hid_device_remove() is
+		 * executed. This is needed as some drivers would allocate
+		 * additional resources, for example when updating firmware.
+		 */
 		if (ret) {
+			devres_release_bus_group(dev);
 			hid_close_report(hdev);
 			hdev->driver = NULL;
 		}
@@ -2662,6 +2675,7 @@ static void hid_device_remove(struct device *dev)
 			hdrv->remove(hdev);
 		else /* default remove */
 			hid_hw_stop(hdev);
+		devres_release_bus_group(dev);
 		hid_close_report(hdev);
 		hdev->driver = NULL;
 	}
