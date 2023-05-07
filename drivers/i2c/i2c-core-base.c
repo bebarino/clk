@@ -554,12 +554,9 @@ static int i2c_device_probe(struct device *dev)
 	if (status)
 		goto err_clear_wakeup_irq;
 
-	client->devres_group_id = devres_open_group(&client->dev, NULL,
-						    GFP_KERNEL);
-	if (!client->devres_group_id) {
-		status = -ENOMEM;
+	status = devres_open_bus_group(&client->dev, GFP_KERNEL);
+	if (status)
 		goto err_detach_pm_domain;
-	}
 
 	if (driver->probe)
 		status = driver->probe(client);
@@ -580,7 +577,7 @@ static int i2c_device_probe(struct device *dev)
 	return 0;
 
 err_release_driver_resources:
-	devres_release_group(&client->dev, client->devres_group_id);
+	devres_release_bus_group(&client->dev);
 err_detach_pm_domain:
 	dev_pm_domain_detach(&client->dev, do_power_on);
 err_clear_wakeup_irq:
@@ -605,7 +602,7 @@ static void i2c_device_remove(struct device *dev)
 		driver->remove(client);
 	}
 
-	devres_release_group(&client->dev, client->devres_group_id);
+	devres_release_bus_group(&client->dev);
 
 	dev_pm_domain_detach(&client->dev, true);
 
