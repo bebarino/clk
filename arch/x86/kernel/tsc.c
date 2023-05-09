@@ -63,6 +63,8 @@ struct cyc2ns {
 
 static DEFINE_PER_CPU_ALIGNED(struct cyc2ns, cyc2ns);
 
+static DEFINE_PER_CPU_READ_MOSTLY(u32, tsc_cyc2ns_mul_shadow);
+
 static int __init tsc_early_khz_setup(char *buf)
 {
 	return kstrtouint(buf, 0, &tsc_early_khz);
@@ -159,6 +161,8 @@ static void __set_cyc2ns_scale(unsigned long khz, int cpu, unsigned long long ts
 
 	data.cyc2ns_offset = ns_now -
 		mul_u64_u32_shr(tsc_now, data.cyc2ns_mul, data.cyc2ns_shift);
+
+	per_cpu(tsc_cyc2ns_mul_shadow, cpu) = data.cyc2ns_mul;
 
 	c2n = per_cpu_ptr(&cyc2ns, cpu);
 
@@ -935,10 +939,27 @@ static unsigned long long cyc2ns_suspend;
 
 void tsc_save_sched_clock_state(void)
 {
+	int cpu;
+	struct cyc2ns *c2n;
+
 	if (!sched_clock_stable())
 		return;
 
 	cyc2ns_suspend = sched_clock();
+
+	/*
+	 * We're entering suspend, there's no concurrency yet; don't
+	 * bother being nice about the RCU stuff, just write to both
+	 * data fields.
+	 */
+	for_each_possible_cpu(cpu) {
+		c2n = per_cpu_ptr(&cyc2ns, cpu);
+		c2n->data[0].cyc2ns_offset = cyc2ns_suspend;
+		c2n->data[1].cyc2ns_offset = cyc2ns_suspend;
+		/* Freeze native_sched_clock() to the time at suspend entry */
+		c2n->data[0].cyc2ns_mul = 0;
+		c2n->data[1].cyc2ns_mul = 0;
+	}
 }
 
 /*
@@ -954,6 +975,8 @@ void tsc_restore_sched_clock_state(void)
 	unsigned long long offset;
 	unsigned long flags;
 	int cpu;
+	struct cyc2ns *c2n;
+	u32 cyc2ns_mul_shadow;
 
 	if (!sched_clock_stable())
 		return;
@@ -965,15 +988,22 @@ void tsc_restore_sched_clock_state(void)
 	 * bother being nice about the RCU stuff, just write to both
 	 * data fields.
 	 */
-
+	cyc2ns_mul_shadow = this_cpu_read(tsc_cyc2ns_mul_shadow);
 	this_cpu_write(cyc2ns.data[0].cyc2ns_offset, 0);
 	this_cpu_write(cyc2ns.data[1].cyc2ns_offset, 0);
+	/* Thaw sched_clock() by restoring cyc2ns_mul */
+	this_cpu_write(cyc2ns.data[0].cyc2ns_mul, cyc2ns_mul_shadow);
+	this_cpu_write(cyc2ns.data[1].cyc2ns_mul, cyc2ns_mul_shadow);
 
 	offset = cyc2ns_suspend - sched_clock();
 
 	for_each_possible_cpu(cpu) {
-		per_cpu(cyc2ns.data[0].cyc2ns_offset, cpu) = offset;
-		per_cpu(cyc2ns.data[1].cyc2ns_offset, cpu) = offset;
+		cyc2ns_mul_shadow = per_cpu(tsc_cyc2ns_mul_shadow, cpu);
+		c2n = per_cpu_ptr(&cyc2ns, cpu);
+		c2n->data[0].cyc2ns_offset = offset;
+		c2n->data[1].cyc2ns_offset = offset;
+		c2n->data[0].cyc2ns_mul = cyc2ns_mul_shadow;
+		c2n->data[1].cyc2ns_mul = cyc2ns_mul_shadow;
 	}
 
 	local_irq_restore(flags);
