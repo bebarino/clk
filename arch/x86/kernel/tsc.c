@@ -962,6 +962,12 @@ void tsc_save_sched_clock_state(void)
 	}
 }
 
+int sched_clock_suspend(void)
+{
+	tsc_save_sched_clock_state();
+	return 0;
+}
+
 /*
  * Even on processors with invariant TSC, TSC gets reset in some the
  * ACPI system sleep states. And in some systems BIOS seem to reinit TSC to
@@ -1007,6 +1013,11 @@ void tsc_restore_sched_clock_state(void)
 	}
 
 	local_irq_restore(flags);
+}
+
+void sched_clock_resume(void)
+{
+	tsc_restore_sched_clock_state();
 }
 
 #ifdef CONFIG_CPU_FREQ

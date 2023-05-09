@@ -14,7 +14,7 @@ extern u64 timekeeping_max_deferment(void);
 extern void timekeeping_warp_clock(void);
 extern int timekeeping_suspend(void);
 extern void timekeeping_resume(void);
-#ifdef CONFIG_GENERIC_SCHED_CLOCK
+#if defined(CONFIG_GENERIC_SCHED_CLOCK) || defined(CONFIG_X86_TSC)
 extern int sched_clock_suspend(void);
 extern void sched_clock_resume(void);
 #else
