@@ -10,6 +10,7 @@
 #include <linux/delay.h>
 #include <linux/iopoll.h>
 #include <linux/module.h>
+#include <linux/of.h>
 #include <linux/platform_data/cros_ec_commands.h>
 #include <linux/platform_data/cros_ec_proto.h>
 #include <linux/platform_device.h>
@@ -17,6 +18,13 @@
 #include <linux/usb/typec_dp.h>
 #include <linux/usb/typec_mux.h>
 #include <linux/usb/typec_retimer.h>
+
+#include <drm/bridge/aux-bridge.h>
+
+struct cros_typec_dp_bridge {
+	struct cros_typec_switch_data *sdata;
+	struct device *bridge;
+};
 
 /* Handles and other relevant data required for each port's switches. */
 struct cros_typec_port {
@@ -30,7 +38,9 @@ struct cros_typec_port {
 struct cros_typec_switch_data {
 	struct device *dev;
 	struct cros_ec_device *ec;
+	bool typec_cmd_supported;
 	struct cros_typec_port *ports[EC_USB_PD_MAX_PORTS];
+	struct cros_typec_dp_bridge *typec_dp_bridge;
 };
 
 static int cros_typec_cmd_mux_set(struct cros_typec_switch_data *sdata, int port_num, u8 index,
@@ -143,13 +153,55 @@ static int cros_typec_configure_mux(struct cros_typec_switch_data *sdata, int po
 	return 0;
 }
 
+static int cros_typec_dp_port_switch_set(struct typec_mux_dev *mode_switch,
+					 struct typec_mux_state *state)
+{
+	struct cros_typec_port *port;
+	const struct typec_displayport_data *dp_data;
+	struct cros_typec_dp_bridge *typec_dp_bridge;
+	struct device *bridge;
+	bool hpd_asserted;
+
+	port = typec_mux_get_drvdata(mode_switch);
+	typec_dp_bridge = port->sdata->typec_dp_bridge;
+	if (!typec_dp_bridge)
+		return 0;
+
+	bridge = typec_dp_bridge->bridge;
+
+	if (state->mode == TYPEC_STATE_SAFE || state->mode == TYPEC_STATE_USB) {
+		drm_aux_hpd_bridge_notify(bridge, connector_status_disconnected);
+		return 0;
+	}
+
+	if (state->alt && state->alt->svid == USB_TYPEC_DP_SID) {
+		hpd_asserted = dp_data->status & DP_STATUS_HPD_STATE;
+
+		if (hpd_asserted)
+			drm_aux_hpd_bridge_notify(bridge, connector_status_connected);
+		else
+			drm_aux_hpd_bridge_notify(bridge, connector_status_disconnected);
+	}
+
+	return 0;
+}
+
 static int cros_typec_mode_switch_set(struct typec_mux_dev *mode_switch,
 				      struct typec_mux_state *state)
 {
 	struct cros_typec_port *port = typec_mux_get_drvdata(mode_switch);
+	struct cros_typec_switch_data *sdata = port->sdata;
+	int ret;
+
+	ret = cros_typec_dp_port_switch_set(mode_switch, state);
+	if (ret)
+		return ret;
 
 	/* Mode switches have index 0. */
-	return cros_typec_configure_mux(port->sdata, port->port_num, 0, state->mode, state->alt);
+	if (sdata->typec_cmd_supported)
+		return cros_typec_configure_mux(port->sdata, port->port_num, 0, state->mode, state->alt);
+
+	return 0;
 }
 
 static int cros_typec_retimer_set(struct typec_retimer *retimer, struct typec_retimer_state *state)
@@ -201,12 +253,39 @@ static int cros_typec_register_retimer(struct cros_typec_port *port, struct fwno
 	return PTR_ERR_OR_ZERO(port->retimer);
 }
 
+static int cros_typec_register_dp_bridge(struct cros_typec_switch_data *sdata)
+{
+	struct cros_typec_dp_bridge *typec_dp_bridge;
+	struct device *bridge;
+	struct device *dev = sdata->dev;
+	struct drm_dp_typec_bridge_desc desc = {
+		.parent = dev,
+	};
+
+	typec_dp_bridge = devm_kzalloc(dev, sizeof(*typec_dp_bridge), GFP_KERNEL);
+	if (!typec_dp_bridge)
+		return -ENOMEM;
+
+	typec_dp_bridge->sdata = sdata;
+	sdata->typec_dp_bridge = typec_dp_bridge;
+
+	desc.of_node = dev->of_node;
+	bridge = drm_dp_typec_bridge_register(&desc);
+	if (IS_ERR(bridge))
+		return PTR_ERR(bridge);
+	typec_dp_bridge->bridge = bridge;
+
+	return 0;
+}
+
 static int cros_typec_register_port(struct cros_typec_switch_data *sdata,
 				    struct fwnode_handle *fwnode)
 {
 	struct cros_typec_port *port;
 	struct device *dev = sdata->dev;
 	struct acpi_device *adev;
+	struct device_node *np;
+	struct fwnode_handle *port_node;
 	u32 index;
 	int ret;
 	const char *prop_name;
@@ -218,9 +297,12 @@ static int cros_typec_register_port(struct cros_typec_switch_data *sdata,
 	adev = to_acpi_device_node(fwnode);
 	if (adev)
 		prop_name = "_ADR";
+	np = to_of_node(fwnode);
+	if (np)
+		prop_name = "reg";
 
-	if (!adev)
-		return dev_err_probe(fwnode->dev, -ENODEV, "Couldn't get ACPI handle\n");
+	if (!adev && !np)
+		return dev_err_probe(fwnode->dev, -ENODEV, "Couldn't get ACPI/OF device handle\n");
 
 	ret = fwnode_property_read_u32(fwnode, prop_name, &index);
 	if (ret)
@@ -232,41 +314,84 @@ static int cros_typec_register_port(struct cros_typec_switch_data *sdata,
 	port->port_num = index;
 	sdata->ports[index] = port;
 
+	port_node = fwnode;
+	if (np)
+		fwnode = fwnode_graph_get_port_parent(fwnode);
+
 	if (fwnode_property_present(fwnode, "retimer-switch")) {
-		ret = cros_typec_register_retimer(port, fwnode);
-		if (ret)
-			return dev_err_probe(dev, ret, "Retimer switch register failed\n");
+		ret = cros_typec_register_retimer(port, port_node);
+		if (ret) {
+			dev_err_probe(dev, ret, "Retimer switch register failed\n");
+			goto out;
+		}
 
 		dev_dbg(dev, "Retimer switch registered for index %u\n", index);
 	}
 
-	if (!fwnode_property_present(fwnode, "mode-switch"))
-		return 0;
+	if (fwnode_property_present(fwnode, "mode-switch")) {
+		ret = cros_typec_register_mode_switch(port, port_node);
+		if (ret) {
+			dev_err_probe(dev, ret, "Mode switch register failed\n");
+			goto out;
+		}
 
-	ret = cros_typec_register_mode_switch(port, fwnode);
-	if (ret)
-		return dev_err_probe(dev, ret, "Mode switch register failed\n");
+		dev_dbg(dev, "Mode switch registered for index %u\n", index);
+	}
 
-	dev_dbg(dev, "Mode switch registered for index %u\n", index);
 
+out:
+	if (np)
+		fwnode_handle_put(fwnode);
 	return ret;
 }
 
 static int cros_typec_register_switches(struct cros_typec_switch_data *sdata)
 {
 	struct device *dev = sdata->dev;
+	struct fwnode_handle *devnode;
 	struct fwnode_handle *fwnode;
+	struct fwnode_endpoint endpoint;
 	int nports, ret;
 
 	nports = device_get_child_node_count(dev);
 	if (nports == 0)
 		return dev_err_probe(dev, -ENODEV, "No switch devices found\n");
 
-	device_for_each_child_node(dev, fwnode) {
-		ret = cros_typec_register_port(sdata, fwnode);
-		if (ret) {
+	devnode = dev_fwnode(dev);
+	if (fwnode_graph_get_endpoint_count(devnode, 0)) {
+		fwnode_graph_for_each_endpoint(devnode, fwnode) {
+			ret = fwnode_graph_parse_endpoint(fwnode, &endpoint);
+			if (ret) {
+				fwnode_handle_put(fwnode);
+				goto err;
+			}
+			/* Skip if not a type-c output port */
+			if (endpoint.port != 2)
+				continue;
+
+			ret = cros_typec_register_port(sdata, fwnode);
+			if (ret) {
+				fwnode_handle_put(fwnode);
+				goto err;
+			}
+		}
+	} else {
+		device_for_each_child_node(dev, fwnode) {
+			ret = cros_typec_register_port(sdata, fwnode);
+			if (ret) {
+				fwnode_handle_put(fwnode);
+				goto err;
+			}
+		}
+	}
+
+	if (fwnode_property_present(devnode, "mode-switch")) {
+		fwnode = fwnode_graph_get_endpoint_by_id(devnode, 0, 0, 0);
+		if (fwnode) {
+			ret = cros_typec_register_dp_bridge(sdata);
 			fwnode_handle_put(fwnode);
-			goto err;
+			if (ret)
+				goto err;
 		}
 	}
 
@@ -280,6 +405,7 @@ static int cros_typec_switch_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
 	struct cros_typec_switch_data *sdata;
+	struct cros_ec_dev *ec_dev;
 
 	sdata = devm_kzalloc(dev, sizeof(*sdata), GFP_KERNEL);
 	if (!sdata)
@@ -287,6 +413,12 @@ static int cros_typec_switch_probe(struct platform_device *pdev)
 
 	sdata->dev = dev;
 	sdata->ec = dev_get_drvdata(pdev->dev.parent);
+
+	ec_dev = dev_get_drvdata(&sdata->ec->ec->dev);
+	if (!ec_dev)
+		return -EPROBE_DEFER;
+
+	sdata->typec_cmd_supported = cros_ec_check_features(ec_dev, EC_FEATURE_TYPEC_AP_MUX_SET);
 
 	platform_set_drvdata(pdev, sdata);
 
@@ -308,10 +440,19 @@ static const struct acpi_device_id cros_typec_switch_acpi_id[] = {
 MODULE_DEVICE_TABLE(acpi, cros_typec_switch_acpi_id);
 #endif
 
+#ifdef CONFIG_OF
+static const struct of_device_id cros_typec_switch_of_match_table[] = {
+	{ .compatible = "google,cros-ec-typec-switch" },
+	{}
+};
+MODULE_DEVICE_TABLE(of, cros_typec_switch_of_match_table);
+#endif
+
 static struct platform_driver cros_typec_switch_driver = {
 	.driver	= {
 		.name = "cros-typec-switch",
 		.acpi_match_table = ACPI_PTR(cros_typec_switch_acpi_id),
+		.of_match_table = of_match_ptr(cros_typec_switch_of_match_table),
 	},
 	.probe = cros_typec_switch_probe,
 	.remove_new = cros_typec_switch_remove,
