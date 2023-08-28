@@ -41,6 +41,10 @@ struct cros_typec_data {
 	bool needs_mux_ack;
 };
 
+struct cros_typec_dp_bridge {
+	struct device *dev;
+};
+
 /* Per port data. */
 struct cros_typec_port {
 	struct typec_port *port;
@@ -65,6 +69,7 @@ struct cros_typec_port {
 	uint8_t mux_flags;
 	uint8_t role;
 
+	struct cros_typec_dp_bridge *dp_bridge;
 	struct typec_altmode *port_altmode[CROS_EC_ALTMODE_MAX];
 
 	/* Flag indicating that PD partner discovery data parsing is completed. */
