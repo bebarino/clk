@@ -5,6 +5,19 @@
  * Copyright 2024 Google LLC.
  */
 
+/ {
+	pogo_pins: pogo-pin-connector {
+		compatible = "google,pogo-pin-connector";
+		#address-cells = <1>;
+		#size-cells = <0>;
+		/* Detachable keyboard populated for each board */
+		port {
+			pogo_pins_in: endpoint {
+			};
+		};
+	};
+};
+
 &cros_ec {
 	keyboard-controller {
 		compatible = "google,cros-ec-keyb-switches";

@@ -650,6 +650,12 @@ ap_ec_spi: &spi6 {
 		pinctrl-0 = <&ap_ec_int_l>;
 		spi-max-frequency = <3000000>;
 
+		cros_ec_gpio: gpio {
+			compatible = "google,cros-ec-gpio";
+			#gpio-cells = <2>;
+			gpio-controller;
+		};
+
 		cros_ec_pwm: pwm {
 			compatible = "google,cros-ec-pwm";
 			#pwm-cells = <1>;
@@ -660,6 +666,65 @@ ap_ec_spi: &spi6 {
 			google,remote-bus = <0>;
 			#address-cells = <1>;
 			#size-cells = <0>;
+		};
+
+		typec-switch {
+			compatible = "google,cros-ec-typec-switch";
+			no-hpd;
+			mode-switch;
+			mux-gpios = <&cros_ec_gpio 42 GPIO_ACTIVE_HIGH>;
+
+			ports {
+				#address-cells = <1>;
+				#size-cells = <0>;
+
+				port@0 {
+					reg = <0>;
+					#address-cells = <1>;
+					#size-cells = <0>;
+
+					dp_ml0_ml1: endpoint@0 {
+						reg = <0>;
+						remote-endpoint = <&mdss_dp_out>;
+						data-lanes = <0 1>;
+					};
+				};
+
+				port@1 {
+					reg = <1>;
+					#address-cells = <1>;
+					#size-cells = <0>;
+
+					usb_c0_ss_rxtx: endpoint@0 {
+						reg = <0>;
+						/* Endpoint filled in by board */
+					};
+
+					usb_c1_ss_rxtx: endpoint@1 {
+						reg = <1>;
+						/* Endpoint filled in by board */
+					};
+				};
+
+				port@2 {
+					reg = <2>;
+					#address-cells = <1>;
+					#size-cells = <0>;
+
+					cros_typec_c0_ss: endpoint@0 {
+						reg = <0>;
+						remote-endpoint = <&usb_c0_ss>;
+						data-lanes = <0 1 2 3>;
+					};
+
+					cros_typec_c1_ss: endpoint@1 {
+						reg = <1>;
+						remote-endpoint = <&usb_c1_ss>;
+						data-lanes = <0 1 2 3>;
+					};
+				};
+			};
+
 		};
 
 		typec {
@@ -674,6 +739,25 @@ ap_ec_spi: &spi6 {
 				power-role = "dual";
 				data-role = "host";
 				try-power-role = "source";
+
+				ports {
+					#address-cells = <1>;
+					#size-cells = <0>;
+
+					port@0 {
+						reg = <0>;
+						usb_c0_hs: endpoint {
+							/* Endpoint filled in by board */
+						};
+					};
+
+					port@1 {
+						reg = <1>;
+						usb_c0_ss: endpoint {
+							remote-endpoint = <&cros_typec_c0_ss>;
+						};
+					};
+				};
 			};
 
 			usb_c1: connector@1 {
@@ -683,6 +767,25 @@ ap_ec_spi: &spi6 {
 				power-role = "dual";
 				data-role = "host";
 				try-power-role = "source";
+
+				ports {
+					#address-cells = <1>;
+					#size-cells = <0>;
+
+					port@0 {
+						reg = <0>;
+						usb_c1_hs: endpoint {
+							/* Endpoint filled in by board */
+						};
+					};
+
+					port@1 {
+						reg = <1>;
+						usb_c1_ss: endpoint {
+							remote-endpoint = <&cros_typec_c1_ss>;
+						};
+					};
+				};
 			};
 		};
 	};
@@ -794,6 +897,7 @@ hp_i2c: &i2c9 {
 &mdss_dp_out {
 	data-lanes = <0 1>;
 	link-frequencies = /bits/ 64 <1620000000 2700000000 5400000000>;
+	remote-endpoint = <&dp_ml0_ml1>;
 };
 
 &mdss_dsi0 {
@@ -965,6 +1069,41 @@ ap_spi_fp: &spi10 {
 		reg = <1>;
 		vdd-supply = <&pp3300_hub>;
 		peer-hub = <&usb_hub_3_x>;
+
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		usb_hub_2_x_ports: ports {
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			port@1 {
+				reg = <1>;
+				usb_hub_dfp1_hs: endpoint {
+					/* Remote endpoint filled in by board */
+				};
+			};
+			port@2 {
+				reg = <2>;
+				usb_hub_dfp2_hs: endpoint {
+					/* Remote endpoint filled in by board */
+				};
+			};
+
+			port@3 {
+				reg = <3>;
+				usb_hub_dfp3_hs: endpoint {
+					/* Remote endpoint filled in by board */
+				};
+			};
+
+			port@4 {
+				reg = <4>;
+				usb_hub_dfp4_hs: endpoint {
+					/* Remote endpoint filled in by board */
+				};
+			};
+		};
 	};
 
 	/* 3.x hub on port 2 */
@@ -973,6 +1112,42 @@ ap_spi_fp: &spi10 {
 		reg = <2>;
 		vdd-supply = <&pp3300_hub>;
 		peer-hub = <&usb_hub_2_x>;
+
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		usb_hub_3_x_ports: ports {
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			port@1 {
+				reg = <1>;
+				usb_hub_dfp1_ss: endpoint {
+					/* Remote endpoint filled in by board */
+				};
+			};
+
+			port@2 {
+				reg = <2>;
+				usb_hub_dfp2_ss: endpoint {
+					/* Remote endpoint filled in by board */
+				};
+			};
+
+			port@3 {
+				reg = <3>;
+				usb_hub_dfp3_ss: endpoint {
+					/* Remote endpoint filled in by board */
+				};
+			};
+
+			port@4 {
+				reg = <4>;
+				usb_hub_dfp4_ss: endpoint {
+					/* Remote endpoint filled in by board */
+				};
+			};
+		};
 	};
 };
 
