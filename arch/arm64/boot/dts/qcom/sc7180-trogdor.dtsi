@@ -649,6 +649,9 @@ ap_ec_spi: &spi6 {
 		spi-max-frequency = <3000000>;
 		wakeup-source;
 
+		#gpio-cells = <2>;
+		gpio-controller;
+
 		cros_ec_pwm: pwm {
 			compatible = "google,cros-ec-pwm";
 			#pwm-cells = <1>;
@@ -665,6 +668,8 @@ ap_ec_spi: &spi6 {
 			compatible = "google,cros-ec-typec";
 			#address-cells = <1>;
 			#size-cells = <0>;
+			mux-gpios = <&cros_ec 42 GPIO_ACTIVE_HIGH>;
+			no-hpd;
 
 			usb_c0: connector@0 {
 				compatible = "usb-c-connector";
@@ -673,6 +678,16 @@ ap_ec_spi: &spi6 {
 				power-role = "dual";
 				data-role = "host";
 				try-power-role = "source";
+
+				altmodes {
+					displayport {
+						port {
+							usb_c0_dp: endpoint {
+								remote-endpoint = <&dp_c0_ml0_ml1>;
+							};
+						};
+					};
+				};
 
 				ports {
 					#address-cells = <1>;
@@ -704,6 +719,16 @@ ap_ec_spi: &spi6 {
 				data-role = "host";
 				try-power-role = "source";
 
+				altmodes {
+					displayport {
+						port {
+							usb_c1_dp: endpoint {
+								remote-endpoint = <&dp_c1_ml0_ml1>;
+							};
+						};
+					};
+				};
+
 				ports {
 					#address-cells = <1>;
 					#size-cells = <0>;
@@ -722,6 +747,32 @@ ap_ec_spi: &spi6 {
 						usb_c1_ss: endpoint {
 							/* Endpoint filled in by board */
 						};
+					};
+				};
+			};
+
+			ports {
+				#address-cells = <1>;
+				#size-cells = <0>;
+
+				port@0 {
+					reg = <0>;
+					#address-cells = <1>;
+					#size-cells = <0>;
+
+					dp_ml0_ml1: endpoint@0 {
+						reg = <0>;
+						remote-endpoint = <&mdss_dp_out>;
+					};
+
+					dp_c0_ml0_ml1: endpoint@1 {
+						reg = <1>;
+						remote-endpoint = <&usb_c0_dp>;
+					};
+
+					dp_c1_ml0_ml1: endpoint@2 {
+						reg = <2>;
+						remote-endpoint = <&usb_c1_dp>;
 					};
 				};
 			};
@@ -835,6 +886,7 @@ hp_i2c: &i2c9 {
 &mdss_dp_out {
 	data-lanes = <0 1>;
 	link-frequencies = /bits/ 64 <1620000000 2700000000 5400000000>;
+	remote-endpoint = <&dp_ml0_ml1>;
 };
 
 &mdss_dsi0 {
