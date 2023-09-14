@@ -166,6 +166,10 @@ patternProperties:
     type: object
     $ref: /schemas/extcon/extcon-usbc-cros-ec.yaml#
 
+  "^typec-dp-switch-[0-9]*$":
+    type: object
+    $ref: /schemas/usb/google,cros-ec-typec-dp-switch.yaml#
+
 required:
   - compatible
 
@@ -229,6 +233,7 @@ allOf:
         "^i2c-tunnel[0-9]*$": false
         "^regulator@[0-9]+$": false
         "^extcon[0-9]*$": false
+        "^typec-dp-switch-[0-9]+$": false
 
       # Using additionalProperties: false here and
       # listing true properties doesn't work
