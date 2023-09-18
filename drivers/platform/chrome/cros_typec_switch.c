@@ -207,29 +207,31 @@ static int cros_typec_register_port(struct cros_typec_switch_data *sdata,
 	struct cros_typec_port *port;
 	struct device *dev = sdata->dev;
 	struct acpi_device *adev;
-	unsigned long long index;
+	u32 index;
 	int ret;
+	const char *prop_name;
 
 	port = devm_kzalloc(dev, sizeof(*port), GFP_KERNEL);
 	if (!port)
 		return -ENOMEM;
 
 	adev = to_acpi_device_node(fwnode);
-	if (adev) {
-		ret = acpi_evaluate_integer(adev->handle, "_ADR", NULL, &index);
-		if (ACPI_FAILURE(ret)) {
-			dev_err(fwnode->dev, "_ADR wasn't evaluated\n");
-			return -ENODATA;
-		}
-	}
+	if (adev)
+		prop_name = "_ADR";
 
 	if (!adev) {
 		dev_err(fwnode->dev, "Couldn't get ACPI handle\n");
 		return -ENODEV;
 	}
 
+	ret = fwnode_property_read_u32(fwnode, prop_name, &index);
+	if (ret) {
+		dev_err(fwnode->dev, "%s property wasn't found\n", prop_name);
+		return ret;
+	}
+
 	if (index >= EC_USB_PD_MAX_PORTS) {
-		dev_err(fwnode->dev, "Invalid port index number: %llu\n", index);
+		dev_err(fwnode->dev, "Invalid port index number: %u\n", index);
 		return -EINVAL;
 	}
 	port->sdata = sdata;
@@ -243,7 +245,7 @@ static int cros_typec_register_port(struct cros_typec_switch_data *sdata,
 			return ret;
 		}
 
-		dev_dbg(dev, "Retimer switch registered for index %llu\n", index);
+		dev_dbg(dev, "Retimer switch registered for index %u\n", index);
 	}
 
 	if (!fwnode_property_present(fwnode, "mode-switch"))
@@ -255,7 +257,7 @@ static int cros_typec_register_port(struct cros_typec_switch_data *sdata,
 		return ret;
 	}
 
-	dev_dbg(dev, "Mode switch registered for index %llu\n", index);
+	dev_dbg(dev, "Mode switch registered for index %u\n", index);
 
 	return ret;
 }
