@@ -201,13 +201,69 @@ static int cros_typec_register_retimer(struct cros_typec_port *port, struct fwno
 	return PTR_ERR_OR_ZERO(port->retimer);
 }
 
-static int cros_typec_register_switches(struct cros_typec_switch_data *sdata)
+static int cros_typec_register_port(struct cros_typec_switch_data *sdata,
+				    struct fwnode_handle *fwnode)
 {
 	struct cros_typec_port *port;
 	struct device *dev = sdata->dev;
-	struct fwnode_handle *fwnode;
 	struct acpi_device *adev;
 	unsigned long long index;
+	int ret;
+
+	port = devm_kzalloc(dev, sizeof(*port), GFP_KERNEL);
+	if (!port)
+		return -ENOMEM;
+
+	adev = to_acpi_device_node(fwnode);
+	if (adev) {
+		ret = acpi_evaluate_integer(adev->handle, "_ADR", NULL, &index);
+		if (ACPI_FAILURE(ret)) {
+			dev_err(fwnode->dev, "_ADR wasn't evaluated\n");
+			return -ENODATA;
+		}
+	}
+
+	if (!adev) {
+		dev_err(fwnode->dev, "Couldn't get ACPI handle\n");
+		return -ENODEV;
+	}
+
+	if (index >= EC_USB_PD_MAX_PORTS) {
+		dev_err(fwnode->dev, "Invalid port index number: %llu\n", index);
+		return -EINVAL;
+	}
+	port->sdata = sdata;
+	port->port_num = index;
+	sdata->ports[index] = port;
+
+	if (fwnode_property_present(fwnode, "retimer-switch")) {
+		ret = cros_typec_register_retimer(port, fwnode);
+		if (ret) {
+			dev_err(dev, "Retimer switch register failed\n");
+			return ret;
+		}
+
+		dev_dbg(dev, "Retimer switch registered for index %llu\n", index);
+	}
+
+	if (!fwnode_property_present(fwnode, "mode-switch"))
+		return 0;
+
+	ret = cros_typec_register_mode_switch(port, fwnode);
+	if (ret) {
+		dev_err(dev, "Mode switch register failed\n");
+		return ret;
+	}
+
+	dev_dbg(dev, "Mode switch registered for index %llu\n", index);
+
+	return ret;
+}
+
+static int cros_typec_register_switches(struct cros_typec_switch_data *sdata)
+{
+	struct device *dev = sdata->dev;
+	struct fwnode_handle *fwnode;
 	int nports, ret;
 
 	nports = device_get_child_node_count(dev);
@@ -217,60 +273,15 @@ static int cros_typec_register_switches(struct cros_typec_switch_data *sdata)
 	}
 
 	device_for_each_child_node(dev, fwnode) {
-		port = devm_kzalloc(dev, sizeof(*port), GFP_KERNEL);
-		if (!port) {
-			ret = -ENOMEM;
-			goto err_switch;
-		}
-
-		adev = to_acpi_device_node(fwnode);
-		if (!adev) {
-			dev_err(fwnode->dev, "Couldn't get ACPI device handle\n");
-			ret = -ENODEV;
-			goto err_switch;
-		}
-
-		ret = acpi_evaluate_integer(adev->handle, "_ADR", NULL, &index);
-		if (ACPI_FAILURE(ret)) {
-			dev_err(fwnode->dev, "_ADR wasn't evaluated\n");
-			ret = -ENODATA;
-			goto err_switch;
-		}
-
-		if (index >= EC_USB_PD_MAX_PORTS) {
-			dev_err(fwnode->dev, "Invalid port index number: %llu\n", index);
-			ret = -EINVAL;
-			goto err_switch;
-		}
-		port->sdata = sdata;
-		port->port_num = index;
-		sdata->ports[index] = port;
-
-		if (fwnode_property_present(fwnode, "retimer-switch")) {
-			ret = cros_typec_register_retimer(port, fwnode);
-			if (ret) {
-				dev_err(dev, "Retimer switch register failed\n");
-				goto err_switch;
-			}
-
-			dev_dbg(dev, "Retimer switch registered for index %llu\n", index);
-		}
-
-		if (!fwnode_property_present(fwnode, "mode-switch"))
-			continue;
-
-		ret = cros_typec_register_mode_switch(port, fwnode);
+		ret = cros_typec_register_port(sdata, fwnode);
 		if (ret) {
-			dev_err(dev, "Mode switch register failed\n");
-			goto err_switch;
+			fwnode_handle_put(fwnode);
+			goto err;
 		}
-
-		dev_dbg(dev, "Mode switch registered for index %llu\n", index);
 	}
 
 	return 0;
-err_switch:
-	fwnode_handle_put(fwnode);
+err:
 	cros_typec_unregister_switches(sdata);
 	return ret;
 }
