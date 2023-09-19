@@ -513,7 +513,7 @@ static int cros_typec_enable_dp(struct cros_typec_data *typec,
 	}
 
 	if (!pd_ctrl->dp_mode) {
-		dev_err(typec->dev, "No valid DP mode provided.\n");
+		dev_err(typec->dev, "%d: No valid DP mode provided\n", port_num);
 		return -EINVAL;
 	}
 
@@ -563,8 +563,10 @@ static int cros_typec_enable_dp(struct cros_typec_data *typec,
 	}
 
 	ret = cros_typec_retimer_set(port->retimer, port->state);
-	if (!ret)
+	if (!ret) {
+		dev_info(typec->dev, "enabling dp %#lx %p %#hx\n", port->state.mode, port->state.alt, port->state.alt->svid);
 		ret = typec_mux_set(port->mux, &port->state);
+	}
 
 	return ret;
 }
@@ -620,6 +622,7 @@ static int cros_typec_configure_mux(struct cros_typec_data *typec, int port_num,
 	}
 
 	/* No change needs to be made, let's exit early. */
+	dev_info(typec->dev, "%d: mux_flags %#x resp.flags %#x role %d ec role %d\n", port_num, port->mux_flags, resp.flags, port->role, pd_ctrl->role);
 	if (port->mux_flags == resp.flags && port->role == pd_ctrl->role)
 		return 0;
 
@@ -1100,6 +1103,8 @@ static int cros_typec_port_update(struct cros_typec_data *typec, int port_num)
 			port_num);
 		return -EINVAL;
 	}
+
+	dev_info(typec->dev, "Updating port %d\n", port_num);
 
 	req.port = port_num;
 	req.role = USB_PD_CTRL_ROLE_NO_CHANGE;

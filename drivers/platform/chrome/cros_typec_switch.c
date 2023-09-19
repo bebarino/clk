@@ -180,6 +180,8 @@ static int cros_typec_dp_port_switch_set(struct typec_mux_dev *mode_switch,
 
 	port = typec_mux_get_drvdata(mode_switch);
 	typec_dp_bridge = port->sdata->typec_dp_bridge;
+	dev_info(port->sdata->dev, "got called %d %p %ld\n", port->port_num, typec_dp_bridge, state->mode);
+
 	if (!typec_dp_bridge)
 		return 0;
 
@@ -190,6 +192,7 @@ static int cros_typec_dp_port_switch_set(struct typec_mux_dev *mode_switch,
 		port->num_dp_lanes = 0;
 		if (typec_dp_bridge->active_port == port) {
 			typec_dp_bridge->active_port = NULL;
+			dev_info(port->sdata->dev, "disconnected safe/usb mode\n");
 			if (typec_dp_bridge->hpd_enabled)
 				drm_bridge_hpd_notify(bridge, connector_status_disconnected);
 		}
@@ -197,6 +200,9 @@ static int cros_typec_dp_port_switch_set(struct typec_mux_dev *mode_switch,
 		return 0;
 	}
 
+	dev_info(port->sdata->dev, "checking alt\n");
+	if (state->alt)
+		dev_info(port->sdata->dev, "svid %#hx\n", state->alt->svid);
 	if (state->alt && state->alt->svid == USB_TYPEC_DP_SID) {
 		dp_data = state->data;
 		hpd_asserted = dp_data->status & DP_STATUS_HPD_STATE;
@@ -219,12 +225,16 @@ static int cros_typec_dp_port_switch_set(struct typec_mux_dev *mode_switch,
 		max_lanes = typec_dp_bridge->max_lanes;
 		port->num_dp_lanes = min(num_lanes, max_lanes);
 
+		dev_info(port->sdata->dev, "set port %d\n", typec_dp_bridge->hpd_enabled);
 		/* Only notify hpd state for the port that has entered DP mode. */
 		if (typec_dp_bridge->hpd_enabled && typec_dp_bridge->active_port == port) {
-			if (hpd_asserted)
+			if (hpd_asserted) {
+				dev_info(port->sdata->dev, "hpd high\n");
 				drm_bridge_hpd_notify(bridge, connector_status_connected);
-			else
+			} else {
+				dev_info(port->sdata->dev, "hpd low\n");
 				drm_bridge_hpd_notify(bridge, connector_status_disconnected);
+			}
 		}
 	}
 
@@ -254,6 +264,7 @@ static int cros_typec_dp_port_orientation_set(struct typec_switch_dev *sw,
 {
 	struct cros_typec_port *port = typec_switch_get_drvdata(sw);
 
+	dev_info(port->sdata->dev, "switch got called %d %u\n", port->port_num, orientation);
 	/*
 	 * Lane remapping is in cros_typec_dp_bridge_atomic_check(). Whenever
 	 * an orientation changes HPD will go low and then high again so the
@@ -332,6 +343,7 @@ static int
 cros_typec_dp_bridge_attach(struct drm_bridge *bridge,
 			    enum drm_bridge_attach_flags flags)
 {
+	pr_info("attached drm_bridge\n");
 	if (!(flags & DRM_BRIDGE_ATTACH_NO_CONNECTOR)) {
 		DRM_ERROR("Fix bridge driver to make connector optional!\n");
 		return -EINVAL;
@@ -407,6 +419,8 @@ static int cros_typec_dp_bridge_atomic_check(struct drm_bridge *bridge,
 	struct cros_typec_port *port;
 	int i, typec_lane;
 
+	pr_info("atomic check\n");
+
 	typec_dp_bridge = bridge_to_cros_typec_dp_bridge(bridge);
 	if (!typec_dp_bridge->active_port)
 		return -ENODEV;
@@ -434,6 +448,8 @@ static int cros_typec_dp_bridge_atomic_check(struct drm_bridge *bridge,
 
 		/* Map logical type-c lane to logical DP lane */
 		in_lanes[i].logical = typec_to_dp_lane(typec_lane, port->orientation);
+
+		pr_info("lane %d -> %d\n", i, in_lanes[i].logical);
 	}
 
 	return 0;
@@ -587,7 +603,7 @@ static int cros_typec_register_port(struct cros_typec_switch_data *sdata,
 			goto out;
 		}
 
-		dev_dbg(dev, "Mode switch registered for index %u\n", index);
+		dev_info(dev, "Mode switch registered for index %u\n", index);
 	}
 
 	if (fwnode_property_present(fwnode, "orientation-switch")) {
@@ -681,6 +697,7 @@ static int cros_typec_switch_probe(struct platform_device *pdev)
 		return -EPROBE_DEFER;
 
 	sdata->typec_cmd_supported = cros_ec_check_features(ec_dev, EC_FEATURE_TYPEC_AP_MUX_SET);
+	dev_info(dev, "typec cmd supported %d\n", sdata->typec_cmd_supported);
 
 	platform_set_drvdata(pdev, sdata);
 
