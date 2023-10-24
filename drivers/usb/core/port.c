@@ -9,6 +9,8 @@
 
 #include <linux/kstrtox.h>
 #include <linux/slab.h>
+#include <linux/of.h>
+#include <linux/of_graph.h>
 #include <linux/pm_qos.h>
 #include <linux/component.h>
 
@@ -696,7 +698,10 @@ int usb_hub_create_port_device(struct usb_hub *hub, int port1)
 {
 	struct usb_port *port_dev;
 	struct usb_device *hdev = hub->hdev;
+	struct device_node *np, *child, *ep, *remote_np, *port_np;
 	int retval;
+	enum usb_port_connect_type connect_type = USB_PORT_CONNECT_TYPE_UNKNOWN;
+	u32 reg;
 
 	port_dev = kzalloc(sizeof(*port_dev), GFP_KERNEL);
 	if (!port_dev)
@@ -707,6 +712,38 @@ int usb_hub_create_port_device(struct usb_hub *hub, int port1)
 		kfree(port_dev);
 		return -ENOMEM;
 	}
+
+	np = hdev->dev.of_node;
+	/* Only set connect_type if binding has ports/hardwired devices. */
+	if (of_get_child_count(np))
+		connect_type = USB_PORT_NOT_USED;
+
+	/* Hotplug ports are connected and available in the OF graph. */
+	if (of_graph_is_present(np)) {
+		port_np = of_graph_get_port_by_id(np, port1);
+		if (port_np) {
+			ep = of_graph_get_endpoint_by_regs(np, port1, -1);
+			if (ep) {
+				remote_np = of_graph_get_remote_port_parent(ep);
+				of_node_put(ep);
+				if (of_device_is_available(remote_np))
+					connect_type = USB_PORT_CONNECT_TYPE_HOT_PLUG;
+				of_node_put(remote_np);
+			}
+		}
+		of_node_put(port_np);
+	}
+
+	/*
+	 * Hard-wired ports are child nodes with a reg property corresponding
+	 * to the port number.
+	 */
+	for_each_available_child_of_node(np, child) {
+		if (!of_property_read_u32(child, "reg", &reg) && reg == port1)
+			connect_type = USB_PORT_CONNECT_TYPE_HARD_WIRED;
+	}
+
+	port_dev->connect_type = connect_type;
 
 	hub->ports[port1 - 1] = port_dev;
 	port_dev->portnum = port1;
