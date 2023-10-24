@@ -8,6 +8,7 @@
  */
 
 #include <linux/of.h>
+#include <linux/of_graph.h>
 #include <linux/usb/of.h>
 
 /**
@@ -74,6 +75,55 @@ bool usb_of_has_combined_node(struct usb_device *udev)
 	return false;
 }
 EXPORT_SYMBOL_GPL(usb_of_has_combined_node);
+
+/**
+ * usb_of_get_connect_type() - get a USB hub's port connect_type
+ * @hub: hub to which port is for @port1
+ * @port1: one-based index of port
+ *
+ * Get the connect_type of @port1 based on the device node for @hub. If the
+ * port is described in the OF graph, the connect_type is "hotplug". If the
+ * @hub has a child device has with a 'reg' property equal to @port1 the
+ * connect_type is "hard-wired". If there isn't an OF graph or child node at
+ * all then the connect_type is "unknown". Otherwise, the port is considered
+ * "unused" because it isn't described at all.
+ *
+ * Return: A connect_type for @port1 based on the device node for @hub.
+ */
+enum usb_port_connect_type usb_of_get_connect_type(struct usb_device *hub, int port1)
+{
+	struct device_node *np, *child, *ep, *remote_np;
+	enum usb_port_connect_type connect_type = USB_PORT_CONNECT_TYPE_UNKNOWN;
+
+	np = hub->dev.of_node;
+	/* Only set connect_type if binding has ports/hardwired devices. */
+	if (of_get_child_count(np))
+		connect_type = USB_PORT_NOT_USED;
+
+	/* Hotplug ports are connected and available in the OF graph. */
+	if (of_graph_is_present(np)) {
+		ep = of_graph_get_endpoint_by_regs(np, port1, -1);
+		if (ep) {
+			remote_np = of_graph_get_remote_port_parent(ep);
+			of_node_put(ep);
+			if (of_device_is_available(remote_np))
+				connect_type = USB_PORT_CONNECT_TYPE_HOT_PLUG;
+			of_node_put(remote_np);
+		}
+	}
+
+	/*
+	 * Hard-wired ports are child nodes with a reg property corresponding
+	 * to the port number.
+	 */
+	child = usb_of_get_device_node(hub, port1);
+	if (of_device_is_available(child))
+		connect_type = USB_PORT_CONNECT_TYPE_HARD_WIRED;
+	of_node_put(child);
+
+	return connect_type;
+}
+EXPORT_SYMBOL_GPL(usb_of_get_connect_type);
 
 /**
  * usb_of_get_interface_node() - get a USB interface node
