@@ -510,13 +510,14 @@ int fwnode_graph_parse_endpoint(const struct fwnode_handle *fwnode,
 /**
  * devcon_match_fn_t - Device connection match function
  * @fwnode: Remote connection's device node
+ * @endpoint: Remote connection's endpoint node
  * @con_id: Identifier for the connection
  * @data: Match function caller specific data
  *
  * Implement a callback with this function signature to search a fwnode's
  * connections for a match with a function like device_connection_find_match().
- * This match function should inspect the @fwnode to look for a match,
- * optionally taking into account the @con_id and @data arguments.
+ * This match function should inspect the @fwnode and/or @endpoint to look for
+ * a match, optionally taking into account the @con_id and @data arguments.
  *
  * The @con_id and @data provided are the same as the @con_id and @data
  * arguments passed to the functions that take a devcon_match_fn_t argument,
@@ -525,7 +526,8 @@ int fwnode_graph_parse_endpoint(const struct fwnode_handle *fwnode,
  * Return: Non-null pointer indicating a match or NULL if no match found.
  */
 typedef void *(*devcon_match_fn_t)(const struct fwnode_handle *fwnode,
-				   const char *con_id, void *data);
+				   const struct fwnode_handle *endpoint,
+				   const char *id, void *data);
 
 void *fwnode_connection_find_match(const struct fwnode_handle *fwnode,
 				   const char *con_id, void *data,
