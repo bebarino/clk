@@ -93,6 +93,9 @@ properties:
   '#size-cells':
     const: 0
 
+  gpio:
+    $ref: /schemas/gpio/google,cros-ec-gpio.yaml#
+
   typec:
     $ref: /schemas/chrome/google,cros-ec-typec.yaml#
 

@@ -1,0 +1,49 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/gpio/google,cros-ec-gpio.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: GPIOs controlled by ChromeOS EC
+
+maintainers:
+  - Stephen Boyd <swboyd@chromium.org>
+
+description:
+  Google's ChromeOS EC has a gpio controller inside the Embedded Controller
+  (EC) and controlled via a host-command interface. The node for this
+  device should be under a cros-ec node like google,cros-ec-spi.
+
+properties:
+  compatible:
+    const: google,cros-ec-gpio
+
+  '#gpio-cells':
+    const: 2
+
+  gpio-controller: true
+
+required:
+  - compatible
+  - '#gpio-cells'
+  - gpio-controller
+
+additionalProperties: false
+
+examples:
+  - |
+    spi {
+      #address-cells = <1>;
+      #size-cells = <0>;
+
+      cros-ec@0 {
+        compatible = "google,cros-ec-spi";
+        reg = <0>;
+        interrupts = <101 0>;
+        gpio {
+          compatible = "google,cros-ec-gpio";
+          gpio-controller;
+          #gpio-cells = <2>;
+        };
+      };
+    };
