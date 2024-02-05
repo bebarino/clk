@@ -20,6 +20,7 @@ static DEFINE_IDA(drm_aux_hpd_bridge_ida);
 struct drm_aux_hpd_bridge_data {
 	struct drm_bridge bridge;
 	struct device *dev;
+	bool no_hpd;
 };
 
 enum dp_lane {
@@ -54,6 +55,10 @@ to_drm_aux_typec_bridge_data(struct drm_bridge *bridge)
 struct drm_aux_typec_bridge_dev {
 	struct auxiliary_device adev;
 	size_t max_lanes;
+	void (*hpd_notify)(struct device *dev, void *data,
+			   enum drm_connector_status status);
+	void *hpd_data;
+	bool no_hpd;
 };
 
 static inline struct drm_aux_typec_bridge_dev *
@@ -192,6 +197,9 @@ drm_dp_typec_bridge_register(const struct drm_dp_typec_bridge_desc *desc)
 	adev->dev.release = drm_aux_typec_bridge_release;
 	adev->dev.platform_data = of_node_get(desc->of_node);
 	typec_bridge_dev->max_lanes = desc->num_dp_lanes;
+	typec_bridge_dev->no_hpd = desc->no_hpd;
+	typec_bridge_dev->hpd_notify = desc->hpd_notify;
+	typec_bridge_dev->hpd_data = desc->hpd_data;
 
 	ret = auxiliary_device_init(adev);
 	if (ret) {
@@ -231,10 +239,25 @@ void drm_aux_hpd_bridge_notify(struct device *dev, enum drm_connector_status sta
 
 	if (!data)
 		return;
+	if (data->no_hpd)
+		return;
 
 	drm_bridge_hpd_notify(&data->bridge, status);
 }
 EXPORT_SYMBOL_GPL(drm_aux_hpd_bridge_notify);
+
+static void drm_aux_typec_bridge_hpd_notify(struct drm_bridge *bridge,
+					    enum drm_connector_status status)
+{
+	struct drm_aux_typec_bridge_data *data;
+	struct drm_aux_typec_bridge_dev *typec_bridge_dev;
+
+	data = to_drm_aux_typec_bridge_data(bridge);
+	typec_bridge_dev = to_drm_aux_typec_bridge_dev(data->hpd_bridge.dev);
+
+	if (typec_bridge_dev->hpd_notify)
+		typec_bridge_dev->hpd_notify(data->hpd_bridge.dev, typec_bridge_dev->hpd_data, status);
+}
 
 static int drm_aux_hpd_bridge_attach(struct drm_bridge *bridge,
 				     enum drm_bridge_attach_flags flags)
@@ -379,6 +402,7 @@ static const struct drm_bridge_funcs drm_aux_typec_bridge_funcs = {
 	.atomic_reset = drm_atomic_helper_bridge_reset,
 	.atomic_duplicate_state = drm_atomic_helper_bridge_duplicate_state,
 	.atomic_destroy_state = drm_atomic_helper_bridge_destroy_state,
+	.hpd_notify = drm_aux_typec_bridge_hpd_notify,
 };
 
 enum drm_aux_bridge_type {
@@ -391,6 +415,7 @@ static int drm_aux_hpd_bridge_probe(struct auxiliary_device *auxdev,
 {
 	struct device *dev = &auxdev->dev;
 	struct drm_aux_hpd_bridge_data *hpd_data;
+	struct drm_aux_typec_bridge_dev *typec_bridge_dev;
 	struct drm_aux_typec_bridge_data *typec_data;
 	struct drm_bridge *bridge;
 
@@ -400,6 +425,7 @@ static int drm_aux_hpd_bridge_probe(struct auxiliary_device *auxdev,
 			return -ENOMEM;
 		bridge = &hpd_data->bridge;
 		bridge->funcs = &drm_aux_hpd_bridge_funcs;
+		bridge->ops = DRM_BRIDGE_OP_HPD;
 	} else if (id->driver_data == DRM_AUX_TYPEC_BRIDGE) {
 		typec_data = devm_kzalloc(dev, sizeof(*typec_data), GFP_KERNEL);
 		if (!typec_data)
@@ -407,13 +433,16 @@ static int drm_aux_hpd_bridge_probe(struct auxiliary_device *auxdev,
 		hpd_data = &typec_data->hpd_bridge;
 		bridge = &hpd_data->bridge;
 		bridge->funcs = &drm_aux_typec_bridge_funcs;
+		typec_bridge_dev = to_drm_aux_typec_bridge_dev(dev);
+		if (!typec_bridge_dev->no_hpd)
+			bridge->ops = DRM_BRIDGE_OP_HPD;
+		hpd_data->no_hpd = typec_bridge_dev->no_hpd;
 	} else {
 		return -ENODEV;
 	}
 
 	hpd_data->dev = dev;
 	bridge->of_node = dev_get_platdata(dev);
-	bridge->ops = DRM_BRIDGE_OP_HPD;
 	bridge->type = DRM_MODE_CONNECTOR_DisplayPort;
 
 	auxiliary_set_drvdata(auxdev, hpd_data);
