@@ -69,6 +69,7 @@ struct cros_typec_port {
 	uint8_t mux_flags;
 	uint8_t role;
 
+	bool hpd_high;
 	u32 lane_mapping[NUM_USB_SS];
 	struct cros_typec_dp_bridge *dp_bridge;
 	struct typec_altmode *port_altmode[CROS_EC_ALTMODE_MAX];
