@@ -28,6 +28,10 @@ struct drm_dp_typec_bridge_desc {
 	struct device *parent;
 	struct device_node *of_node;
 	size_t num_dp_lanes;
+	void (*hpd_notify)(struct drm_dp_typec_bridge_dev *typec_bridge_dev,
+			   void *data, enum drm_connector_status status);
+	void *hpd_data;
+	bool no_hpd;
 };
 
 enum usb_ss_lane {
