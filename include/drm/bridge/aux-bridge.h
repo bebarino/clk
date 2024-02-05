@@ -7,6 +7,8 @@
 #ifndef DRM_AUX_BRIDGE_H
 #define DRM_AUX_BRIDGE_H
 
+#include <linux/usb/typec.h>
+
 #include <drm/drm_connector.h>
 
 #if IS_ENABLED(CONFIG_DRM_AUX_BRIDGE)
@@ -39,6 +41,7 @@ struct device *drm_dp_hpd_bridge_register(struct device *parent,
 struct device *drm_dp_typec_bridge_register(const struct drm_dp_typec_bridge_desc *desc);
 void drm_aux_hpd_bridge_notify(struct device *dev, enum drm_connector_status status);
 int drm_aux_typec_bridge_assign_pins(struct device *dev, u32 conf,
+				     enum typec_orientation orientation,
 				     enum usb_ss_lane lane_mapping[NUM_USB_SS]);
 #else
 static inline struct device *drm_dp_hpd_bridge_register(struct device *parent,
@@ -57,6 +60,7 @@ static inline void drm_aux_hpd_bridge_notify(struct device *dev, enum drm_connec
 {
 }
 static inline int drm_aux_typec_bridge_assign_pins(struct device *dev, u32 conf,
+				     enum typec_orientation orientation,
 				     enum usb_ss_lane lane_mapping[NUM_USB_SS])
 {
 	return 0;
