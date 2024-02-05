@@ -32,8 +32,10 @@ struct cros_typec_dp_bridge {
 struct cros_typec_port {
 	int port_num;
 	struct typec_mux_dev *mode_switch;
+	struct typec_switch_dev *orientation_switch;
 	struct typec_retimer *retimer;
 	u32 lane_mapping[NUM_USB_SS];
+	enum typec_orientation orientation;
 	struct cros_typec_switch_data *sdata;
 };
 
@@ -198,7 +200,9 @@ static int cros_typec_dp_port_switch_set(struct typec_mux_dev *mode_switch,
 
 		/* Only notify hpd state for the port that has entered DP mode. */
 		if (typec_dp_bridge->active_port == port) {
-			ret = drm_aux_typec_bridge_assign_pins(bridge, dp_data->conf, 0, port->lane_mapping);
+			ret = drm_aux_typec_bridge_assign_pins(bridge, dp_data->conf,
+							       port->orientation,
+							       port->lane_mapping);
 			if (ret)
 				return ret;
 
@@ -226,6 +230,21 @@ static int cros_typec_mode_switch_set(struct typec_mux_dev *mode_switch,
 	/* Mode switches have index 0. */
 	if (sdata->typec_cmd_supported)
 		return cros_typec_configure_mux(port->sdata, port->port_num, 0, state->mode, state->alt);
+
+	return 0;
+}
+
+static int cros_typec_dp_port_orientation_set(struct typec_switch_dev *sw,
+					      enum typec_orientation orientation)
+{
+	struct cros_typec_port *port = typec_switch_get_drvdata(sw);
+
+	/*
+	 * Lane remapping is in cros_typec_dp_bridge_atomic_check(). Whenever
+	 * an orientation changes HPD will go low and then high again so the
+	 * atomic check handles the orientation change.
+	 */
+	port->orientation = orientation;
 
 	return 0;
 }
@@ -263,6 +282,21 @@ static int cros_typec_register_mode_switch(struct cros_typec_port *port,
 	port->mode_switch = typec_mux_register(port->sdata->dev, &mode_switch_desc);
 
 	return PTR_ERR_OR_ZERO(port->mode_switch);
+}
+
+static int cros_typec_register_orientation_switch(struct cros_typec_port *port,
+						  struct fwnode_handle *fwnode)
+{
+	struct typec_switch_desc orientation_switch_desc = {
+		.fwnode = fwnode,
+		.drvdata = port,
+		.name = fwnode_get_name(fwnode),
+		.set = cros_typec_dp_port_orientation_set,
+	};
+
+	port->orientation_switch = typec_switch_register(port->sdata->dev, &orientation_switch_desc);
+
+	return PTR_ERR_OR_ZERO(port->orientation_switch);
 }
 
 static int cros_typec_register_retimer(struct cros_typec_port *port, struct fwnode_handle *fwnode)
@@ -377,6 +411,15 @@ static int cros_typec_register_port(struct cros_typec_switch_data *sdata,
 		dev_dbg(dev, "Mode switch registered for index %u\n", index);
 	}
 
+	if (fwnode_property_present(fwnode, "orientation-switch")) {
+		ret = cros_typec_register_orientation_switch(port, port_node);
+		if (ret) {
+			dev_err(dev, "Orientation switch register failed\n");
+			goto out;
+		}
+
+		dev_dbg(dev, "Orientation switch registered for index %u\n", index);
+	}
 
 out:
 	if (np)
@@ -424,7 +467,8 @@ static int cros_typec_register_switches(struct cros_typec_switch_data *sdata)
 		}
 	}
 
-	if (fwnode_property_present(devnode, "mode-switch")) {
+	if (fwnode_property_present(devnode, "mode-switch") ||
+	    fwnode_property_present(devnode, "orientation-switch")) {
 		fwnode = fwnode_graph_get_endpoint_by_id(devnode, 0, 0, 0);
 		if (fwnode) {
 			ret = cros_typec_register_dp_bridge(sdata, fwnode);
