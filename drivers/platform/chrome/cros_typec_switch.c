@@ -219,31 +219,23 @@ static int cros_typec_register_port(struct cros_typec_switch_data *sdata,
 	if (adev)
 		prop_name = "_ADR";
 
-	if (!adev) {
-		dev_err(fwnode->dev, "Couldn't get ACPI handle\n");
-		return -ENODEV;
-	}
+	if (!adev)
+		return dev_err_probe(fwnode->dev, -ENODEV, "Couldn't get ACPI handle\n");
 
 	ret = fwnode_property_read_u32(fwnode, prop_name, &index);
-	if (ret) {
-		dev_err(fwnode->dev, "%s property wasn't found\n", prop_name);
-		return ret;
-	}
+	if (ret)
+		return dev_err_probe(fwnode->dev, ret, "%s property wasn't found\n", prop_name);
 
-	if (index >= EC_USB_PD_MAX_PORTS) {
-		dev_err(fwnode->dev, "Invalid port index number: %u\n", index);
-		return -EINVAL;
-	}
+	if (index >= EC_USB_PD_MAX_PORTS)
+		return dev_err_probe(fwnode->dev, -EINVAL, "Invalid port index number: %u\n", index);
 	port->sdata = sdata;
 	port->port_num = index;
 	sdata->ports[index] = port;
 
 	if (fwnode_property_present(fwnode, "retimer-switch")) {
 		ret = cros_typec_register_retimer(port, fwnode);
-		if (ret) {
-			dev_err(dev, "Retimer switch register failed\n");
-			return ret;
-		}
+		if (ret)
+			return dev_err_probe(dev, ret, "Retimer switch register failed\n");
 
 		dev_dbg(dev, "Retimer switch registered for index %u\n", index);
 	}
@@ -252,10 +244,8 @@ static int cros_typec_register_port(struct cros_typec_switch_data *sdata,
 		return 0;
 
 	ret = cros_typec_register_mode_switch(port, fwnode);
-	if (ret) {
-		dev_err(dev, "Mode switch register failed\n");
-		return ret;
-	}
+	if (ret)
+		return dev_err_probe(dev, ret, "Mode switch register failed\n");
 
 	dev_dbg(dev, "Mode switch registered for index %u\n", index);
 
@@ -269,10 +259,8 @@ static int cros_typec_register_switches(struct cros_typec_switch_data *sdata)
 	int nports, ret;
 
 	nports = device_get_child_node_count(dev);
-	if (nports == 0) {
-		dev_err(dev, "No switch devices found.\n");
-		return -ENODEV;
-	}
+	if (nports == 0)
+		return dev_err_probe(dev, -ENODEV, "No switch devices found\n");
 
 	device_for_each_child_node(dev, fwnode) {
 		ret = cros_typec_register_port(sdata, fwnode);
