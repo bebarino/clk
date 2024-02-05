@@ -81,6 +81,9 @@ struct drm_dp_typec_bridge_dev {
 	struct auxiliary_device adev;
 	size_t max_lanes;
 	size_t num_typec_ports;
+	void (*hpd_notify)(struct drm_dp_typec_bridge_dev *dev,
+			   void *data, enum drm_connector_status status);
+	void *hpd_data;
 };
 
 static inline struct drm_dp_typec_bridge_dev *
@@ -273,6 +276,8 @@ devm_drm_dp_typec_bridge_alloc(struct device *parent, const struct drm_dp_typec_
 		num_dp_lanes = NUM_DP_ML;
 
 	typec_bridge_dev->max_lanes = num_dp_lanes;
+	typec_bridge_dev->hpd_notify = desc->hpd_notify;
+	typec_bridge_dev->hpd_data = desc->hpd_data;
 
 	ret = ida_alloc(&drm_aux_hpd_bridge_ida, GFP_KERNEL);
 	if (ret < 0) {
@@ -341,6 +346,19 @@ void drm_aux_hpd_bridge_notify(struct device *dev, enum drm_connector_status sta
 	drm_bridge_hpd_notify(&data->bridge, status);
 }
 EXPORT_SYMBOL_GPL(drm_aux_hpd_bridge_notify);
+
+static void drm_dp_typec_bridge_hpd_notify(struct drm_bridge *bridge,
+					    enum drm_connector_status status)
+{
+	struct drm_dp_typec_bridge_data *data;
+	struct drm_dp_typec_bridge_dev *typec_bridge_dev;
+
+	data = to_drm_dp_typec_bridge_data(bridge);
+	typec_bridge_dev = to_drm_dp_typec_bridge_dev(data->hpd_bridge.dev);
+
+	if (typec_bridge_dev->hpd_notify)
+		typec_bridge_dev->hpd_notify(typec_bridge_dev, typec_bridge_dev->hpd_data, status);
+}
 
 static int drm_aux_hpd_bridge_attach(struct drm_bridge *bridge,
 				     enum drm_bridge_attach_flags flags)
@@ -496,6 +514,7 @@ static const struct drm_bridge_funcs drm_dp_typec_bridge_funcs = {
 	.atomic_reset = drm_atomic_helper_bridge_reset,
 	.atomic_duplicate_state = drm_atomic_helper_bridge_duplicate_state,
 	.atomic_destroy_state = drm_atomic_helper_bridge_destroy_state,
+	.hpd_notify = drm_dp_typec_bridge_hpd_notify,
 };
 
 static int drm_dp_typec_bridge_orientation_set(struct typec_switch_dev *sw,

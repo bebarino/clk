@@ -25,9 +25,14 @@ struct drm_dp_typec_bridge_dev;
 /**
  * struct drm_dp_typec_bridge_desc - drm_dp_typec_bridge descriptor
  * @of_node: device node pointer corresponding to this bridge instance
+ * @hpd_notify: callback for bridge hot plug detect events
+ * @hpd_data: data passed to @hpd_notify callback
  */
 struct drm_dp_typec_bridge_desc {
 	struct device_node *of_node;
+	void (*hpd_notify)(struct drm_dp_typec_bridge_dev *typec_bridge_dev,
+			   void *data, enum drm_connector_status status);
+	void *hpd_data;
 };
 
 #if IS_ENABLED(CONFIG_DRM_AUX_HPD_BRIDGE)
