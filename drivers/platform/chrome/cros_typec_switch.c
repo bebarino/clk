@@ -8,6 +8,7 @@
 
 #include <linux/acpi.h>
 #include <linux/delay.h>
+#include <linux/gpio/consumer.h>
 #include <linux/iopoll.h>
 #include <linux/module.h>
 #include <linux/of.h>
@@ -26,6 +27,7 @@
 struct cros_typec_dp_bridge {
 	/* TODO: Add mutex lock to protect active_port with respect to drm/typec framework calls */
 	struct cros_typec_port *active_port;
+	struct gpio_desc *mux_gpio;
 	struct cros_typec_switch_data *sdata;
 	size_t max_lanes;
 	bool hpd_enabled;
@@ -453,6 +455,29 @@ static void cros_typec_dp_bridge_hpd_disable(struct drm_bridge *bridge)
 	typec_dp_bridge->hpd_enabled = false;
 }
 
+static void cros_typec_dp_bridge_hpd_notify(struct drm_bridge *bridge,
+					    enum drm_connector_status status)
+{
+	struct cros_typec_dp_bridge *typec_dp_bridge;
+	struct cros_typec_switch_data *sdata;
+	struct gpio_desc *mux_gpio;
+	int mux_val;
+
+	typec_dp_bridge = bridge_to_cros_typec_dp_bridge(bridge);
+	mux_gpio = typec_dp_bridge->mux_gpio;
+
+	/*
+	 * Some ECs don't notify AP when HPD goes high or low so we have to
+	 * read the EC GPIO that controls the mux to figure out which type-c
+	 * port is connected to DP.
+	 */
+	if (mux_gpio) {
+		sdata = typec_dp_bridge->sdata;
+		mux_val = gpiod_get_value_cansleep(mux_gpio);
+		typec_dp_bridge->active_port = sdata->ports[mux_val];
+	}
+}
+
 static const struct drm_bridge_funcs cros_typec_dp_bridge_funcs = {
 	.attach = cros_typec_dp_bridge_attach,
 	.atomic_check = cros_typec_dp_bridge_atomic_check,
@@ -461,6 +486,7 @@ static const struct drm_bridge_funcs cros_typec_dp_bridge_funcs = {
 	.atomic_destroy_state = drm_atomic_helper_bridge_destroy_state,
 	.hpd_enable = cros_typec_dp_bridge_hpd_enable,
 	.hpd_disable = cros_typec_dp_bridge_hpd_disable,
+	.hpd_notify = cros_typec_dp_bridge_hpd_notify,
 };
 
 static int cros_typec_register_dp_bridge(struct cros_typec_switch_data *sdata,
@@ -478,6 +504,10 @@ static int cros_typec_register_dp_bridge(struct cros_typec_switch_data *sdata,
 	typec_dp_bridge->sdata = sdata;
 	sdata->typec_dp_bridge = typec_dp_bridge;
 
+	typec_dp_bridge->mux_gpio = devm_gpiod_get_optional(dev, "mux", 0);
+	if (IS_ERR(typec_dp_bridge->mux_gpio))
+		return PTR_ERR(typec_dp_bridge->mux_gpio);
+
 	num_lanes = fwnode_property_count_u32(fwnode, "data-lanes");
 	if (num_lanes < 0)
 		num_lanes = 4;
@@ -488,7 +518,8 @@ static int cros_typec_register_dp_bridge(struct cros_typec_switch_data *sdata,
 	bridge->funcs = &cros_typec_dp_bridge_funcs;
 	bridge->of_node = dev->of_node;
 	bridge->type = DRM_MODE_CONNECTOR_DisplayPort;
-	bridge->ops |= DRM_BRIDGE_OP_HPD;
+	if (!fwnode_property_present(dev_fwnode(dev), "no-hpd"))
+		bridge->ops |= DRM_BRIDGE_OP_HPD;
 
 	return devm_drm_bridge_add(dev, bridge);
 }
