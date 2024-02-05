@@ -46,6 +46,7 @@ struct cros_typec_data {
 struct cros_typec_dp_bridge {
 	struct device *dev;
 	struct cros_typec_port *active_port;
+	bool orientation;
 };
 
 /* Per port data. */

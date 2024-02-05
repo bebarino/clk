@@ -434,6 +434,8 @@ static int cros_typec_init_dp_bridge(struct cros_typec_data *typec, int port_num
 		return -ENOMEM;
 	}
 
+	dp_bridge->orientation = of_property_read_bool(ep, "orientation");
+
 	num_lanes = of_property_count_u32_elems(ep, "data-lanes");
 	if (num_lanes < 0)
 		num_lanes = 4;
@@ -604,6 +606,7 @@ static int cros_typec_enable_dp(struct cros_typec_data *typec,
 	u32 cable_tbt_vdo;
 	u32 cable_dp_vdo;
 	int ret;
+	enum typec_orientation orientation;
 	bool hpd_asserted = port->mux_flags & USB_PD_MUX_HPD_LVL;
 
 	if (typec->pd_ctrl_ver < 2) {
@@ -644,7 +647,13 @@ static int cros_typec_enable_dp(struct cros_typec_data *typec,
 	}
 
 	if (dp_bridge && dp_bridge->active_port == port) {
-		ret = drm_aux_typec_bridge_assign_pins(dp_bridge->dev, dp_data.conf, 0,
+		orientation = TYPEC_ORIENTATION_NORMAL;
+		if (dp_bridge->orientation &&
+		    port->mux_flags & USB_PD_MUX_POLARITY_INVERTED)
+			orientation = TYPEC_ORIENTATION_REVERSE;
+
+		ret = drm_aux_typec_bridge_assign_pins(dp_bridge->dev, dp_data.conf,
+						       orientation,
 						       port->lane_mapping);
 		if (ret)
 			return ret;
