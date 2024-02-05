@@ -27,6 +27,7 @@
 struct cros_typec_dp_bridge {
 	struct drm_dp_typec_bridge_dev *dev;
 	struct cros_typec_port *active_port;
+	bool orientation;
 };
 
 #define DP_PORT_VDO	(DP_CONF_SET_PIN_ASSIGN(BIT(DP_PIN_ASSIGN_C) | BIT(DP_PIN_ASSIGN_D)) | \
@@ -435,6 +436,7 @@ static int cros_typec_init_dp_bridge(struct cros_typec_data *typec,
 	struct device *dev = typec->dev;
 	struct cros_typec_dp_bridge *dp_bridge;
 	struct fwnode_handle *ep __free(fwnode_handle);
+	struct fwnode_handle *devnode;
 	struct drm_dp_typec_bridge_dev *dp_dev;
 	int num_lanes;
 	int ret;
@@ -442,7 +444,8 @@ static int cros_typec_init_dp_bridge(struct cros_typec_data *typec,
 		.of_node = dev->of_node,
 	};
 
-	ep = fwnode_graph_get_endpoint_by_id(dev_fwnode(dev), 0, port_num, 0);
+	devnode = dev_fwnode(dev);
+	ep = fwnode_graph_get_endpoint_by_id(devnode, 0, port_num, 0);
 	if (!ep) {
 		/* There was a typec port at 0 but no DP input. Ignore */
 		if (port_num == 0)
@@ -460,6 +463,8 @@ static int cros_typec_init_dp_bridge(struct cros_typec_data *typec,
 	dp_bridge = devm_kzalloc(dev, sizeof(*dp_bridge), GFP_KERNEL);
 	if (!dp_bridge)
 		return -ENOMEM;
+
+	dp_bridge->orientation = fwnode_property_read_bool(devnode, "orientation");
 
 	num_lanes = fwnode_property_count_u32(ep, "data-lanes");
 	if (num_lanes < 0)
@@ -630,6 +635,7 @@ static int cros_typec_enable_dp(struct cros_typec_data *typec,
 	u32 cable_tbt_vdo;
 	u32 cable_dp_vdo;
 	int ret;
+	enum typec_orientation orientation;
 	bool hpd_asserted = port->mux_flags & USB_PD_MUX_HPD_LVL;
 
 	if (typec->pd_ctrl_ver < 2) {
@@ -670,7 +676,13 @@ static int cros_typec_enable_dp(struct cros_typec_data *typec,
 	}
 
 	if (dp_bridge && dp_bridge->active_port == port) {
-		ret = drm_dp_typec_bridge_assign_pins(dp_bridge->dev, dp_data.conf, 0,
+		orientation = TYPEC_ORIENTATION_NORMAL;
+		if (dp_bridge->orientation &&
+		    port->mux_flags & USB_PD_MUX_POLARITY_INVERTED)
+			orientation = TYPEC_ORIENTATION_REVERSE;
+
+		ret = drm_dp_typec_bridge_assign_pins(dp_bridge->dev, dp_data.conf,
+						      orientation,
 						      port->lane_mapping);
 		if (ret)
 			return ret;
