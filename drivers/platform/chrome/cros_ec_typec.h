@@ -46,6 +46,8 @@ struct cros_typec_data {
 struct cros_typec_dp_bridge {
 	struct device *dev;
 	struct cros_typec_port *active_port;
+	struct cros_typec_port *ports[2];
+	struct gpio_desc *mux_gpio;
 	bool orientation;
 };
 

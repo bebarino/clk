@@ -7,6 +7,7 @@
  */
 
 #include <linux/acpi.h>
+#include <linux/gpio/consumer.h>
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/of_graph.h>
@@ -404,6 +405,28 @@ unregister_ports:
 	return ret;
 }
 
+static void cros_typec_dp_bridge_hpd_notify(struct device *dev, void *data,
+					    enum drm_connector_status status)
+{
+	struct cros_typec_dp_bridge *dp_bridge = data;
+	struct gpio_desc *mux_gpio;
+	int mux_val;
+
+	mux_gpio = dp_bridge->mux_gpio;
+
+	/*
+	 * Some ECs don't notify AP when HPD goes high or low so we have to
+	 * read the EC GPIO that controls the mux to figure out which type-c
+	 * port is connected to DP by the EC. We don't care about the connector
+	 * status here because the active_port is always whichever way the mux
+	 * is steering DP data.
+	 */
+	if (mux_gpio) {
+		mux_val = gpiod_get_value_cansleep(mux_gpio);
+		dp_bridge->active_port = dp_bridge->ports[mux_val];
+	}
+}
+
 static int cros_typec_init_dp_bridge(struct cros_typec_data *typec, int port_num)
 {
 	struct device *dev = typec->dev;
@@ -425,6 +448,11 @@ static int cros_typec_init_dp_bridge(struct cros_typec_data *typec, int port_num
 		if (port_num == 0)
 			return -ENODEV;
 		typec_port->dp_bridge = typec->ports[port_num - 1]->dp_bridge;
+
+		if (typec_port->dp_bridge->ports[1])
+			return -EINVAL;
+		typec_port->dp_bridge->ports[1] = typec_port;
+
 		return 0;
 	}
 
@@ -432,6 +460,12 @@ static int cros_typec_init_dp_bridge(struct cros_typec_data *typec, int port_num
 	if (!dp_bridge) {
 		of_node_put(ep);
 		return -ENOMEM;
+	}
+
+	dp_bridge->mux_gpio = devm_gpiod_get_optional(dev, "mux", 0);
+	if (IS_ERR(dp_bridge->mux_gpio)) {
+		of_node_put(ep);
+		return dev_err_probe(dev, PTR_ERR(dp_bridge->mux_gpio), "failed to get mux gpio\n");
 	}
 
 	dp_bridge->orientation = of_property_read_bool(ep, "orientation");
@@ -442,6 +476,10 @@ static int cros_typec_init_dp_bridge(struct cros_typec_data *typec, int port_num
 
 	desc.num_dp_lanes = num_lanes;
 	desc.of_node = ep;
+	desc.no_hpd = of_property_read_bool(ep, "no-hpd");
+	desc.hpd_notify = cros_typec_dp_bridge_hpd_notify;
+	desc.hpd_data = dp_bridge;
+
 	dp_dev = drm_dp_typec_bridge_register(&desc);
 	of_node_put(ep);
 	if (IS_ERR(dp_dev))
