@@ -19,20 +19,28 @@
 #include <linux/usb/typec_mux.h>
 #include <linux/usb/typec_retimer.h>
 
+#include <drm/drm_atomic_state_helper.h>
 #include <drm/drm_bridge.h>
 #include <drm/drm_print.h>
 
 struct cros_typec_dp_bridge {
+	/* TODO: Add mutex lock to protect active_port with respect to drm/typec framework calls */
+	struct cros_typec_port *active_port;
 	struct cros_typec_switch_data *sdata;
+	size_t max_lanes;
 	bool hpd_enabled;
 	struct drm_bridge bridge;
 };
+
+#define USBC_LANES_COUNT 4
 
 /* Handles and other relevant data required for each port's switches. */
 struct cros_typec_port {
 	int port_num;
 	struct typec_mux_dev *mode_switch;
 	struct typec_retimer *retimer;
+	size_t num_dp_lanes;
+	u32 lane_mapping[USBC_LANES_COUNT];
 	struct cros_typec_switch_data *sdata;
 };
 
@@ -163,6 +171,8 @@ static int cros_typec_dp_port_switch_set(struct typec_mux_dev *mode_switch,
 	struct cros_typec_dp_bridge *typec_dp_bridge;
 	struct drm_bridge *bridge;
 	bool hpd_asserted;
+	u8 pin_assign;
+	size_t num_lanes, max_lanes;
 
 	port = typec_mux_get_drvdata(mode_switch);
 	typec_dp_bridge = port->sdata->typec_dp_bridge;
@@ -172,17 +182,41 @@ static int cros_typec_dp_port_switch_set(struct typec_mux_dev *mode_switch,
 	bridge = &typec_dp_bridge->bridge;
 
 	if (state->mode == TYPEC_STATE_SAFE || state->mode == TYPEC_STATE_USB) {
-		if (typec_dp_bridge->hpd_enabled)
-			drm_bridge_hpd_notify(bridge, connector_status_disconnected);
+		/* Clear active port when port isn't in DP mode */
+		port->num_dp_lanes = 0;
+		if (typec_dp_bridge->active_port == port) {
+			typec_dp_bridge->active_port = NULL;
+			if (typec_dp_bridge->hpd_enabled)
+				drm_bridge_hpd_notify(bridge, connector_status_disconnected);
+		}
 
 		return 0;
 	}
 
 	if (state->alt && state->alt->svid == USB_TYPEC_DP_SID) {
-		if (typec_dp_bridge->hpd_enabled) {
-			dp_data = state->data;
-			hpd_asserted = dp_data->status & DP_STATUS_HPD_STATE;
+		dp_data = state->data;
+		hpd_asserted = dp_data->status & DP_STATUS_HPD_STATE;
+		/*
+		 * Assume the first port to have HPD asserted is the one muxed
+		 * to DP (i.e. active_port). When there's only one port this
+		 * delays setting the active_port until HPD is asserted, but
+		 * before that the drm_connector looks disconnected so
+		 * active_port doesn't need to be set.
+		 */
+		if (hpd_asserted && !typec_dp_bridge->active_port)
+			typec_dp_bridge->active_port = port;
 
+		/* Determine number of logical DP lanes from pin assignment */
+		pin_assign = DP_CONF_GET_PIN_ASSIGN(dp_data->conf);
+		if (pin_assign == DP_PIN_ASSIGN_D)
+			num_lanes = 2;
+		else
+			num_lanes = 4;
+		max_lanes = typec_dp_bridge->max_lanes;
+		port->num_dp_lanes = min(num_lanes, max_lanes);
+
+		/* Only notify hpd state for the port that has entered DP mode. */
+		if (typec_dp_bridge->hpd_enabled && typec_dp_bridge->active_port == port) {
 			if (hpd_asserted)
 				drm_bridge_hpd_notify(bridge, connector_status_connected);
 			else
@@ -278,6 +312,81 @@ bridge_to_cros_typec_dp_bridge(struct drm_bridge *bridge)
 	return container_of(bridge, struct cros_typec_dp_bridge, bridge);
 }
 
+static int dp_lane_to_typec_lane(unsigned int dp_lane)
+{
+	switch (dp_lane) {
+	case 0:
+		return 2;
+	case 1:
+		return 3;
+	case 2:
+		return 1;
+	case 3:
+		return 0;
+	}
+
+	return -EINVAL;
+}
+
+static int typec_to_dp_lane(unsigned int typec_lane)
+{
+	switch (typec_lane) {
+	case 0:
+		return 3;
+	case 1:
+		return 2;
+	case 2:
+		return 0;
+	case 3:
+		return 1;
+	}
+
+	return -EINVAL;
+}
+
+static int cros_typec_dp_bridge_atomic_check(struct drm_bridge *bridge,
+			    struct drm_bridge_state *bridge_state,
+			    struct drm_crtc_state *crtc_state,
+			    struct drm_connector_state *conn_state)
+{
+	struct cros_typec_dp_bridge *typec_dp_bridge;
+	struct drm_lane_cfg *in_lanes;
+	size_t num_lanes;
+	struct cros_typec_port *port;
+	int i, typec_lane;
+
+	typec_dp_bridge = bridge_to_cros_typec_dp_bridge(bridge);
+	if (!typec_dp_bridge->active_port)
+		return -ENODEV;
+
+	port = typec_dp_bridge->active_port;
+
+	num_lanes = port->num_dp_lanes;
+	in_lanes = kcalloc(num_lanes, sizeof(*in_lanes), GFP_KERNEL);
+	if (!in_lanes)
+		return -ENOMEM;
+
+	bridge_state->input_bus_cfg.lanes = in_lanes;
+	bridge_state->input_bus_cfg.num_lanes = num_lanes;
+
+	for (i = 0; i < num_lanes; i++) {
+		/* Get physical type-c lane for DP lane */
+		typec_lane = dp_lane_to_typec_lane(i);
+		if (typec_lane < 0) {
+			DRM_ERROR("Invalid type-c lane configuration\n");
+			return -EINVAL;
+		}
+
+		/* Map to logical type-c lane */
+		typec_lane = port->lane_mapping[typec_lane];
+
+		/* Map logical type-c lane to logical DP lane */
+		in_lanes[i].logical = typec_to_dp_lane(typec_lane);
+	}
+
+	return 0;
+}
+
 static void cros_typec_dp_bridge_hpd_enable(struct drm_bridge *bridge)
 {
 	struct cros_typec_dp_bridge *typec_dp_bridge;
@@ -296,6 +405,10 @@ static void cros_typec_dp_bridge_hpd_disable(struct drm_bridge *bridge)
 
 static const struct drm_bridge_funcs cros_typec_dp_bridge_funcs = {
 	.attach = cros_typec_dp_bridge_attach,
+	.atomic_check = cros_typec_dp_bridge_atomic_check,
+	.atomic_reset = drm_atomic_helper_bridge_reset,
+	.atomic_duplicate_state = drm_atomic_helper_bridge_duplicate_state,
+	.atomic_destroy_state = drm_atomic_helper_bridge_destroy_state,
 	.hpd_enable = cros_typec_dp_bridge_hpd_enable,
 	.hpd_disable = cros_typec_dp_bridge_hpd_disable,
 };
@@ -305,6 +418,7 @@ static int cros_typec_register_dp_bridge(struct cros_typec_switch_data *sdata,
 {
 	struct cros_typec_dp_bridge *typec_dp_bridge;
 	struct drm_bridge *bridge;
+	int num_lanes;
 	struct device *dev = sdata->dev;
 
 	typec_dp_bridge = devm_kzalloc(dev, sizeof(*typec_dp_bridge), GFP_KERNEL);
@@ -313,6 +427,12 @@ static int cros_typec_register_dp_bridge(struct cros_typec_switch_data *sdata,
 
 	typec_dp_bridge->sdata = sdata;
 	sdata->typec_dp_bridge = typec_dp_bridge;
+
+	num_lanes = fwnode_property_count_u32(fwnode, "data-lanes");
+	if (num_lanes < 0)
+		num_lanes = 4;
+	typec_dp_bridge->max_lanes = num_lanes;
+
 	bridge = &typec_dp_bridge->bridge;
 
 	bridge->funcs = &cros_typec_dp_bridge_funcs;
@@ -333,6 +453,7 @@ static int cros_typec_register_port(struct cros_typec_switch_data *sdata,
 	struct fwnode_handle *port_node;
 	u32 index;
 	int ret;
+	const u32 default_lane_mapping[] = { 0, 1, 2, 3 };
 	const char *prop_name;
 
 	port = devm_kzalloc(dev, sizeof(*port), GFP_KERNEL);
@@ -358,6 +479,11 @@ static int cros_typec_register_port(struct cros_typec_switch_data *sdata,
 	port->sdata = sdata;
 	port->port_num = index;
 	sdata->ports[index] = port;
+
+	if (fwnode_property_read_u32_array(fwnode, "data-lanes",
+					   port->lane_mapping,
+					   ARRAY_SIZE(port->lane_mapping)))
+		memcpy(port->lane_mapping, default_lane_mapping, sizeof(default_lane_mapping));
 
 	port_node = fwnode;
 	if (np)
