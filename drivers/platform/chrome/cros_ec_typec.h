@@ -14,6 +14,8 @@
 #include <linux/usb/typec_retimer.h>
 #include <linux/workqueue.h>
 
+#include <drm/bridge/aux-bridge.h>
+
 /* Supported alt modes. */
 enum {
 	CROS_EC_ALTMODE_DP = 0,
@@ -43,6 +45,7 @@ struct cros_typec_data {
 
 struct cros_typec_dp_bridge {
 	struct device *dev;
+	struct cros_typec_port *active_port;
 };
 
 /* Per port data. */
@@ -69,6 +72,7 @@ struct cros_typec_port {
 	uint8_t mux_flags;
 	uint8_t role;
 
+	u32 lane_mapping[NUM_USB_SS];
 	struct cros_typec_dp_bridge *dp_bridge;
 	struct typec_altmode *port_altmode[CROS_EC_ALTMODE_MAX];
 

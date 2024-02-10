@@ -411,6 +411,7 @@ static int cros_typec_init_dp_bridge(struct cros_typec_data *typec, int port_num
 	struct cros_typec_dp_bridge *dp_bridge;
 	struct device_node *ep;
 	struct device *dp_dev;
+	int num_lanes;
 	struct drm_dp_typec_bridge_desc desc = {
 		.parent = dev,
 	};
@@ -433,6 +434,11 @@ static int cros_typec_init_dp_bridge(struct cros_typec_data *typec, int port_num
 		return -ENOMEM;
 	}
 
+	num_lanes = of_property_count_u32_elems(ep, "data-lanes");
+	if (num_lanes < 0)
+		num_lanes = 4;
+
+	desc.num_dp_lanes = num_lanes;
 	desc.of_node = ep;
 	dp_dev = drm_dp_typec_bridge_register(&desc);
 	of_node_put(ep);
@@ -441,6 +447,29 @@ static int cros_typec_init_dp_bridge(struct cros_typec_data *typec, int port_num
 
 	dp_bridge->dev = dp_dev;
 	typec_port->dp_bridge = dp_bridge;
+
+	return 0;
+}
+
+static int cros_typec_init_usbc_lanes(struct cros_typec_data *typec, int port_num)
+{
+	struct device *dev = typec->dev;
+	struct cros_typec_port *typec_port;
+	struct device_node *ep;
+	const u32 default_lane_mapping[] = { 0, 1, 2, 3 };
+
+	typec_port = typec->ports[port_num];
+	if (!typec_port)
+		return 0;
+
+	ep = of_graph_get_endpoint_by_regs(dev->of_node, 2, port_num);
+	if (!ep)
+		return -ENODEV;
+
+	if (of_property_read_u32_array(ep, "data-lanes",
+				       typec_port->lane_mapping,
+				       ARRAY_SIZE(typec_port->lane_mapping)))
+		memcpy(typec_port->lane_mapping, default_lane_mapping, sizeof(default_lane_mapping));
 
 	return 0;
 }
@@ -460,6 +489,10 @@ static int cros_typec_init_dp_bridges(struct cros_typec_data *typec)
 		port = typec->ports[i];
 		if (!port)
 			continue;
+
+		ret = cros_typec_init_usbc_lanes(typec, i);
+		if (ret)
+			return ret;
 
 		ret = cros_typec_init_dp_bridge(typec, i);
 		if (ret)
@@ -571,12 +604,23 @@ static int cros_typec_enable_dp(struct cros_typec_data *typec,
 	u32 cable_tbt_vdo;
 	u32 cable_dp_vdo;
 	int ret;
+	bool hpd_asserted = port->mux_flags & USB_PD_MUX_HPD_LVL;
 
 	if (typec->pd_ctrl_ver < 2) {
 		dev_err(typec->dev,
 			"PD_CTRL version too old: %d\n", typec->pd_ctrl_ver);
 		return -ENOTSUPP;
 	}
+
+	/*
+	 * Assume the first port to have HPD asserted is the one muxed to DP
+	 * (i.e. active_port). When there's only one port this delays setting
+	 * the active_port until HPD is asserted, but before that the
+	 * drm_connector looks disconnected so active_port doesn't need to be
+	 * set.
+	 */
+	if (dp_bridge && hpd_asserted && !dp_bridge->active_port)
+		dp_bridge->active_port = port;
 
 	if (!pd_ctrl->dp_mode) {
 		dev_err(typec->dev, "No valid DP mode provided.\n");
@@ -587,7 +631,7 @@ static int cros_typec_enable_dp(struct cros_typec_data *typec,
 	dp_data.status = DP_STATUS_ENABLED;
 	if (port->mux_flags & USB_PD_MUX_HPD_IRQ)
 		dp_data.status |= DP_STATUS_IRQ_HPD;
-	if (port->mux_flags & USB_PD_MUX_HPD_LVL)
+	if (hpd_asserted)
 		dp_data.status |= DP_STATUS_HPD_STATE;
 
 	/* Configuration VDO. */
@@ -595,6 +639,13 @@ static int cros_typec_enable_dp(struct cros_typec_data *typec,
 	if (!port->state.alt) {
 		port->state.alt = port->port_altmode[CROS_EC_ALTMODE_DP];
 		ret = cros_typec_usb_safe_state(port);
+		if (ret)
+			return ret;
+	}
+
+	if (dp_bridge && dp_bridge->active_port == port) {
+		ret = drm_aux_typec_bridge_assign_pins(dp_bridge->dev, dp_data.conf, 0,
+						       port->lane_mapping);
 		if (ret)
 			return ret;
 	}
@@ -632,9 +683,9 @@ static int cros_typec_enable_dp(struct cros_typec_data *typec,
 	if (!ret)
 		ret = typec_mux_set(port->mux, &port->state);
 
-	if (dp_bridge)
+	if (dp_bridge && dp_bridge->active_port == port)
 		drm_aux_hpd_bridge_notify(dp_bridge->dev,
-					  dp_data.status & DP_STATUS_HPD_STATE ?
+					  hpd_asserted ?
 					  connector_status_connected :
 					  connector_status_disconnected);
 	return ret;
@@ -742,8 +793,10 @@ static int cros_typec_configure_mux(struct cros_typec_data *typec, int port_num,
 	}
 
 mux_ack:
-	if (dp_bridge && !dp_enabled)
+	if (dp_bridge && !dp_enabled && dp_bridge->active_port == port) {
 		drm_aux_hpd_bridge_notify(dp_bridge->dev, connector_status_disconnected);
+		dp_bridge->active_port = NULL;
+	}
 
 	if (!typec->needs_mux_ack)
 		return ret;
