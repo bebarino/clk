@@ -22,6 +22,8 @@
 #include <drm/bridge/aux-bridge.h>
 
 struct cros_typec_dp_bridge {
+	/* TODO: Add mutex lock to protect active_port with respect to drm/typec framework calls */
+	struct cros_typec_port *active_port;
 	struct cros_typec_switch_data *sdata;
 	struct device *bridge;
 };
@@ -31,6 +33,7 @@ struct cros_typec_port {
 	int port_num;
 	struct typec_mux_dev *mode_switch;
 	struct typec_retimer *retimer;
+	u32 lane_mapping[NUM_USB_SS];
 	struct cros_typec_switch_data *sdata;
 };
 
@@ -161,6 +164,7 @@ static int cros_typec_dp_port_switch_set(struct typec_mux_dev *mode_switch,
 	struct cros_typec_dp_bridge *typec_dp_bridge;
 	struct device *bridge;
 	bool hpd_asserted;
+	int ret;
 
 	port = typec_mux_get_drvdata(mode_switch);
 	typec_dp_bridge = port->sdata->typec_dp_bridge;
@@ -170,17 +174,39 @@ static int cros_typec_dp_port_switch_set(struct typec_mux_dev *mode_switch,
 	bridge = typec_dp_bridge->bridge;
 
 	if (state->mode == TYPEC_STATE_SAFE || state->mode == TYPEC_STATE_USB) {
-		drm_aux_hpd_bridge_notify(bridge, connector_status_disconnected);
+		/* Clear active port when port isn't in DP mode */
+		if (typec_dp_bridge->active_port == port) {
+			typec_dp_bridge->active_port = NULL;
+			drm_aux_hpd_bridge_notify(bridge, connector_status_disconnected);
+		}
+
 		return 0;
 	}
 
 	if (state->alt && state->alt->svid == USB_TYPEC_DP_SID) {
+		dp_data = state->data;
 		hpd_asserted = dp_data->status & DP_STATUS_HPD_STATE;
+		/*
+		 * Assume the first port to have HPD asserted is the one muxed
+		 * to DP (i.e. active_port). When there's only one port this
+		 * delays setting the active_port until HPD is asserted, but
+		 * before that the drm_connector looks disconnected so
+		 * active_port doesn't need to be set.
+		 */
+		if (hpd_asserted && !typec_dp_bridge->active_port)
+			typec_dp_bridge->active_port = port;
 
-		if (hpd_asserted)
-			drm_aux_hpd_bridge_notify(bridge, connector_status_connected);
-		else
-			drm_aux_hpd_bridge_notify(bridge, connector_status_disconnected);
+		/* Only notify hpd state for the port that has entered DP mode. */
+		if (typec_dp_bridge->active_port == port) {
+			ret = drm_aux_typec_bridge_assign_pins(bridge, dp_data->conf, 0, port->lane_mapping);
+			if (ret)
+				return ret;
+
+			if (hpd_asserted)
+				drm_aux_hpd_bridge_notify(bridge, connector_status_connected);
+			else
+				drm_aux_hpd_bridge_notify(bridge, connector_status_disconnected);
+		}
 	}
 
 	return 0;
@@ -253,10 +279,12 @@ static int cros_typec_register_retimer(struct cros_typec_port *port, struct fwno
 	return PTR_ERR_OR_ZERO(port->retimer);
 }
 
-static int cros_typec_register_dp_bridge(struct cros_typec_switch_data *sdata)
+static int cros_typec_register_dp_bridge(struct cros_typec_switch_data *sdata,
+					 struct fwnode_handle *fwnode)
 {
 	struct cros_typec_dp_bridge *typec_dp_bridge;
 	struct device *bridge;
+	int num_lanes;
 	struct device *dev = sdata->dev;
 	struct drm_dp_typec_bridge_desc desc = {
 		.parent = dev,
@@ -269,7 +297,12 @@ static int cros_typec_register_dp_bridge(struct cros_typec_switch_data *sdata)
 	typec_dp_bridge->sdata = sdata;
 	sdata->typec_dp_bridge = typec_dp_bridge;
 
+	num_lanes = fwnode_property_count_u32(fwnode, "data-lanes");
+	if (num_lanes < 0)
+		num_lanes = 4;
+
 	desc.of_node = dev->of_node;
+	desc.num_dp_lanes = num_lanes;
 	bridge = drm_dp_typec_bridge_register(&desc);
 	if (IS_ERR(bridge))
 		return PTR_ERR(bridge);
@@ -288,6 +321,7 @@ static int cros_typec_register_port(struct cros_typec_switch_data *sdata,
 	struct fwnode_handle *port_node;
 	u32 index;
 	int ret;
+	const u32 default_lane_mapping[] = { 0, 1, 2, 3 };
 	const char *prop_name;
 
 	port = devm_kzalloc(dev, sizeof(*port), GFP_KERNEL);
@@ -313,6 +347,11 @@ static int cros_typec_register_port(struct cros_typec_switch_data *sdata,
 	port->sdata = sdata;
 	port->port_num = index;
 	sdata->ports[index] = port;
+
+	if (fwnode_property_read_u32_array(fwnode, "data-lanes",
+					   port->lane_mapping,
+					   ARRAY_SIZE(port->lane_mapping)))
+		memcpy(port->lane_mapping, default_lane_mapping, sizeof(default_lane_mapping));
 
 	port_node = fwnode;
 	if (np)
@@ -388,7 +427,7 @@ static int cros_typec_register_switches(struct cros_typec_switch_data *sdata)
 	if (fwnode_property_present(devnode, "mode-switch")) {
 		fwnode = fwnode_graph_get_endpoint_by_id(devnode, 0, 0, 0);
 		if (fwnode) {
-			ret = cros_typec_register_dp_bridge(sdata);
+			ret = cros_typec_register_dp_bridge(sdata, fwnode);
 			fwnode_handle_put(fwnode);
 			if (ret)
 				goto err;
