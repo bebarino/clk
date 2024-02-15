@@ -39,6 +39,8 @@ additionalProperties: false
 
 examples:
   - |+
+    #include <dt-bindings/interrupt-controller/irq.h>
+
     spi {
       #address-cells = <1>;
       #size-cells = <0>;
@@ -46,7 +48,7 @@ examples:
       cros_ec: ec@0 {
         compatible = "google,cros-ec-spi";
         reg = <0>;
-        interrupts = <35 0>;
+        interrupts = <35 IRQ_TYPE_LEVEL_LOW>;
 
         typec {
           compatible = "google,cros-ec-typec";
