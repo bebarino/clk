@@ -92,12 +92,12 @@ static unsigned long bgpio_read32(void __iomem *reg)
 #if BITS_PER_LONG >= 64
 static void bgpio_write64(void __iomem *reg, unsigned long data)
 {
-	writeq(data, reg);
+	iowrite64(data, reg);
 }
 
 static unsigned long bgpio_read64(void __iomem *reg)
 {
-	return readq(reg);
+	return ioread64(reg);
 }
 #endif /* BITS_PER_LONG >= 64 */
 
@@ -120,6 +120,18 @@ static unsigned long bgpio_read32be(void __iomem *reg)
 {
 	return ioread32be(reg);
 }
+
+#if BITS_PER_LONG >= 64
+static void bgpio_write64be(void __iomem *reg, unsigned long data)
+{
+	iowrite64be(data, reg);
+}
+
+static unsigned long bgpio_read64be(void __iomem *reg)
+{
+	return ioread64be(reg);
+}
+#endif /* BITS_PER_LONG >= 64 */
 
 static unsigned long bgpio_line2mask(struct gpio_chip *gc, unsigned int line)
 {
@@ -445,9 +457,8 @@ static int bgpio_setup_accessors(struct device *dev,
 #if BITS_PER_LONG >= 64
 	case 64:
 		if (byte_be) {
-			dev_err(dev,
-				"64 bit big endian byte order unsupported\n");
-			return -EINVAL;
+			gc->read_reg	= bgpio_read64be;
+			gc->write_reg	= bgpio_write64be;
 		} else {
 			gc->read_reg	= bgpio_read64;
 			gc->write_reg	= bgpio_write64;
