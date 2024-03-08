@@ -627,7 +627,7 @@ static bool mux_is_better_rate(unsigned long rate, unsigned long now,
 			   unsigned long best, unsigned long flags)
 {
 	if (flags & CLK_MUX_ROUND_CLOSEST)
-		return abs(now - rate) < abs(best - rate);
+		return abs_diff(now, rate) < abs_diff(best, rate);
 
 	return now <= rate && now > best;
 }
