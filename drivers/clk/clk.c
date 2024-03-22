@@ -1420,7 +1420,7 @@ unprepare_out:
 		clk_core_disable_unprepare(core->parent);
 }
 
-static bool clk_ignore_unused __initdata;
+static bool clk_ignore_unused __initdata = IS_ENABLED(CONFIG_CLK_IGNORE_UNUSED);
 static int __init clk_ignore_unused_setup(char *__unused)
 {
 	clk_ignore_unused = true;
@@ -1433,7 +1433,7 @@ static int __init clk_disable_unused(void)
 	struct clk_core *core;
 
 	if (clk_ignore_unused) {
-		pr_warn("clk: Not disabling unused clocks\n");
+		pr_info("clk: Not disabling unused clocks\n");
 		return 0;
 	}
 
