@@ -60,7 +60,7 @@ static inline int of_property_notify(int action, struct device_node *np,
 }
 #endif /* CONFIG_OF_DYNAMIC */
 
-#if defined(CONFIG_OF_DYNAMIC) && defined(CONFIG_OF_ADDRESS)
+#if defined(CONFIG_OF_DYNAMIC)
 void of_platform_register_reconfig_notifier(void);
 #else
 static inline void of_platform_register_reconfig_notifier(void) { }

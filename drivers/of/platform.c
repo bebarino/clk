@@ -84,12 +84,6 @@ void of_device_unregister(struct platform_device *ofdev)
 }
 EXPORT_SYMBOL(of_device_unregister);
 
-#ifdef CONFIG_OF_ADDRESS
-static const struct of_device_id of_skipped_node_table[] = {
-	{ .compatible = "operating-points-v2", },
-	{} /* Empty terminated list */
-};
-
 /*
  * The following routines scan a subtree and registers a device for
  * each applicable node.
@@ -212,6 +206,32 @@ struct platform_device *of_platform_device_create(struct device_node *np,
 }
 EXPORT_SYMBOL(of_platform_device_create);
 
+int of_platform_device_destroy(struct device *dev, void *data)
+{
+	/* Do not touch devices not populated from the device tree */
+	if (!dev->of_node || !of_node_check_flag(dev->of_node, OF_POPULATED))
+		return 0;
+
+	/* Recurse for any nodes that were treated as busses */
+	if (of_node_check_flag(dev->of_node, OF_POPULATED_BUS))
+		device_for_each_child(dev, NULL, of_platform_device_destroy);
+
+	of_node_clear_flag(dev->of_node, OF_POPULATED);
+	of_node_clear_flag(dev->of_node, OF_POPULATED_BUS);
+
+	if (dev->bus == &platform_bus_type)
+		platform_device_unregister(to_platform_device(dev));
+#ifdef CONFIG_ARM_AMBA
+	else if (dev->bus == &amba_bustype)
+		amba_device_unregister(to_amba_device(dev));
+#endif
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(of_platform_device_destroy);
+
+#ifdef CONFIG_OF_ADDRESS
+
 #ifdef CONFIG_ARM_AMBA
 static struct amba_device *of_amba_device_create(struct device_node *node,
 						 const char *bus_id,
@@ -320,6 +340,11 @@ static const struct of_dev_auxdata *of_dev_lookup(const struct of_dev_auxdata *l
 
 	return NULL;
 }
+
+static const struct of_device_id of_skipped_node_table[] = {
+	{ .compatible = "operating-points-v2", },
+	{} /* Empty terminated list */
+};
 
 /**
  * of_platform_bus_create() - Create a device for a node and its children.
@@ -612,30 +637,6 @@ static int __init of_platform_sync_state_init(void)
 }
 late_initcall_sync(of_platform_sync_state_init);
 
-int of_platform_device_destroy(struct device *dev, void *data)
-{
-	/* Do not touch devices not populated from the device tree */
-	if (!dev->of_node || !of_node_check_flag(dev->of_node, OF_POPULATED))
-		return 0;
-
-	/* Recurse for any nodes that were treated as busses */
-	if (of_node_check_flag(dev->of_node, OF_POPULATED_BUS))
-		device_for_each_child(dev, NULL, of_platform_device_destroy);
-
-	of_node_clear_flag(dev->of_node, OF_POPULATED);
-	of_node_clear_flag(dev->of_node, OF_POPULATED_BUS);
-
-	if (dev->bus == &platform_bus_type)
-		platform_device_unregister(to_platform_device(dev));
-#ifdef CONFIG_ARM_AMBA
-	else if (dev->bus == &amba_bustype)
-		amba_device_unregister(to_amba_device(dev));
-#endif
-
-	return 0;
-}
-EXPORT_SYMBOL_GPL(of_platform_device_destroy);
-
 /**
  * of_platform_depopulate() - Remove devices populated from device tree
  * @parent: device which children will be removed
@@ -725,6 +726,8 @@ void devm_of_platform_depopulate(struct device *dev)
 }
 EXPORT_SYMBOL_GPL(devm_of_platform_depopulate);
 
+#endif /* CONFIG_OF_ADDRESS */
+
 #ifdef CONFIG_OF_DYNAMIC
 static int of_platform_notify(struct notifier_block *nb,
 				unsigned long action, void *arg)
@@ -793,5 +796,3 @@ void of_platform_register_reconfig_notifier(void)
 	WARN_ON(of_reconfig_notifier_register(&platform_of_notifier));
 }
 #endif /* CONFIG_OF_DYNAMIC */
-
-#endif /* CONFIG_OF_ADDRESS */

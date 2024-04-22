@@ -377,10 +377,12 @@ static struct platform_device * __init scan_one_device(struct device_node *dp,
 
 	op->dev.parent = parent;
 	op->dev.bus = &platform_bus_type;
-	if (!parent)
+	if (!parent) {
 		dev_set_name(&op->dev, "root");
-	else
+		of_node_set_flag(dp, OF_POPULATED_BUS);
+	} else {
 		dev_set_name(&op->dev, "%08x", dp->phandle);
+	}
 
 	op->dev.coherent_dma_mask = DMA_BIT_MASK(32);
 	op->dev.dma_mask = &op->dev.coherent_dma_mask;

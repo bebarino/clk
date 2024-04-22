@@ -36,8 +36,6 @@ int of_overlay_fdt_apply_kunit(struct kunit *test, void *overlay_fdt,
 
 	if (!IS_ENABLED(CONFIG_OF_OVERLAY))
 		kunit_skip(test, "requires CONFIG_OF_OVERLAY");
-	if (!IS_ENABLED(CONFIG_OF_EARLY_FLATTREE))
-		kunit_skip(test, "requires root node (CONFIG_OF_EARLY_FLATTREE)");
 
 	copy_id = kunit_kmalloc(test, sizeof(*copy_id), GFP_KERNEL);
 	if (!copy_id)

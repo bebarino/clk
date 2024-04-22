@@ -63,8 +63,6 @@ static void of_overlay_apply_kunit_cleanup(struct kunit *test)
 
 	if (!IS_ENABLED(CONFIG_OF_OVERLAY))
 		kunit_skip(test, "requires CONFIG_OF_OVERLAY");
-	if (!IS_ENABLED(CONFIG_OF_EARLY_FLATTREE))
-		kunit_skip(test, "requires root node (CONFIG_OF_EARLY_FLATTREE)");
 
 	kunit_init_test(&fake, "fake test", NULL);
 	KUNIT_ASSERT_EQ(test, fake.status, KUNIT_SUCCESS);
