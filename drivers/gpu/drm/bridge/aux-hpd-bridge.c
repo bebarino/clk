@@ -350,6 +350,14 @@ static int typec_to_dp_lane(enum usb_ss_lane lane,
 	return -EINVAL;
 }
 
+/**
+ * drm_aux_typec_bridge_assign_pins - 
+ * @dev: device instance providing this bridge
+ * @conf: 
+ * @lane_mapping: 
+ *
+ * Return: 0 on success, negative error code on failure.
+ */
 int drm_aux_typec_bridge_assign_pins(struct device *dev, u32 conf,
 				     enum typec_orientation orientation,
 				     enum usb_ss_lane lane_mapping[NUM_USB_SS])

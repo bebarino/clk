@@ -39,7 +39,7 @@ properties:
   ports:
     type: object
     description:
-      Ports for DisplayPort (DP) and USB input data and USB-C data output
+      Ports for DisplayPort (DP) and USB input data and USB-C output data
     properties:
       "#address-cells":
         const: 1
@@ -187,69 +187,60 @@ additionalProperties: false
 
 examples:
   - |
-    spi {
-      #address-cells = <1>;
-      #size-cells = <0>;
+    typec-dp-switch-0 {
+      compatible = "google,cros-ec-typec-dp-switch";
+      mode-switch;
+      orientation-switch;
 
-      cros_ec: ec@0 {
-        compatible = "google,cros-ec-spi";
-        reg = <0>;
-        interrupts = <35 0>;
+      ports {
+        #address-cells = <1>;
+        #size-cells = <0>;
 
-        typec-dp-switch-0 {
-          compatible = "google,cros-ec-typec-dp-switch";
-          mode-switch;
-          orientation-switch;
+        port@0 {
+          reg = <0>;
+          #address-cells = <1>;
+          #size-cells = <0>;
 
-          ports {
-            #address-cells = <1>;
-            #size-cells = <0>;
+          dp_in: endpoint@0 {
+            reg = <0>;
+            remote-endpoint = <&dp_phy>;
+            data-lanes = <0 1>;
+          };
+        };
 
-            port@0 {
-              reg = <0>;
-              #address-cells = <1>;
-              #size-cells = <0>;
-              dp_in: endpoint@0 {
-                reg = <0>;
-                remote-endpoint = <&dp_phy>;
-                data-lanes = <0 1>;
-              };
-            };
+        port@1 {
+          reg = <1>;
+          #address-cells = <1>;
+          #size-cells = <0>;
 
-            port@1 {
-              reg = <1>;
-              #address-cells = <1>;
-              #size-cells = <0>;
+          usb_in_0: endpoint@0 {
+            reg = <0>;
+            remote-endpoint = <&usb_ss_0_out>;
+          };
 
-              usb_in_0: endpoint@0 {
-                reg = <0>;
-                remote-endpoint = <&usb_ss_0_out>;
-              };
+          usb_in_1: endpoint@1 {
+            reg = <1>;
+            remote-endpoint = <&usb_ss_1_out>;
+          };
+        };
 
-              usb_in_1: endpoint@1 {
-                reg = <1>;
-                remote-endpoint = <&usb_ss_1_out>;
-              };
-            };
+        port@2 {
+          reg = <2>;
+          #address-cells = <1>;
+          #size-cells = <0>;
 
-            port@2 {
-              reg = <2>;
-              #address-cells = <1>;
-              #size-cells = <0>;
+          cros_typec_c0_ss: endpoint@0 {
+            reg = <0>;
+            remote-endpoint = <&usb_c0_ss>;
+          };
 
-              cros_typec_c0_ss: endpoint@0 {
-                reg = <0>;
-                remote-endpoint = <&usb_c0_ss>;
-              };
-
-              cros_typec_c1_ss: endpoint@1 {
-                reg = <1>;
-                remote-endpoint = <&usb_c1_ss>;
-                data-lanes = <3 2 0 1>;
-              };
-            };
+          cros_typec_c1_ss: endpoint@1 {
+            reg = <1>;
+            remote-endpoint = <&usb_c1_ss>;
+            data-lanes = <3 2 0 1>;
           };
         };
       };
     };
+    
 ...
