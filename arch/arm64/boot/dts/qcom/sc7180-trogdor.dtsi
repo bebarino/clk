@@ -669,7 +669,7 @@ ap_ec_spi: &spi6 {
 			#address-cells = <1>;
 			#size-cells = <0>;
 			mux-gpios = <&cros_ec 42 GPIO_ACTIVE_HIGH>;
-			no-hpd;
+			hpd-gpios = <&tlmm 117 GPIO_ACTIVE_HIGH>;
 
 			usb_c0: connector@0 {
 				compatible = "usb-c-connector";
@@ -880,8 +880,6 @@ hp_i2c: &i2c9 {
 
 &mdss_dp {
 	status = "okay";
-	pinctrl-names = "default";
-	pinctrl-0 = <&dp_hot_plug_det>;
 };
 
 &mdss_dp_out {
@@ -1182,10 +1180,6 @@ ap_spi_fp: &spi10 {
 };
 
 /* PINCTRL - additions to nodes defined in sc7180.dtsi */
-
-&dp_hot_plug_det {
-	bias-disable;
-};
 
 &pri_mi2s_active {
 	drive-strength = <2>;
