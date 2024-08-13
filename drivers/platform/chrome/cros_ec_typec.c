@@ -30,6 +30,7 @@ struct cros_typec_dp_bridge {
 	struct cros_typec_port *active_port;
 	struct cros_typec_port *ports[2];
 	struct gpio_desc *mux_gpio;
+	struct gpio_desc *hpd_gpio;
 	bool orientation;
 };
 
@@ -432,8 +433,7 @@ unregister_ports:
 	return ret;
 }
 
-static void cros_typec_dp_bridge_hpd_notify(struct drm_dp_typec_bridge_dev *typec_bridge_dev,
-					    void *data, enum drm_connector_status status)
+static irqreturn_t cros_typec_dp_bridge_hpd_handler(int irq, void *data)
 {
 	struct cros_typec_dp_bridge *dp_bridge = data;
 	struct cros_typec_port *typec_port;
@@ -455,18 +455,20 @@ static void cros_typec_dp_bridge_hpd_notify(struct drm_dp_typec_bridge_dev *type
 	if (mux_gpio) {
 		val = gpiod_get_value_cansleep(mux_gpio);
 		if (val < 0) {
-			dev_err(dev, "Failed to read mux gpio for hpd notify\n");
-			return;
+			dev_err(dev, "Failed to read mux gpio for hpd handler\n");
+			return IRQ_HANDLED;
 		}
 
 		typec_port = dp_bridge->ports[val];
 	}
 
-	/* Proxy the connector status as the HPD state to replay later. */
-	typec_port->hpd_high = status == connector_status_connected;
+	/* Read the level of the HPD pin to replay later. */
+	typec_port->hpd_high = gpiod_get_value_cansleep(dp_bridge->hpd_gpio);
 
 	/* Refresh port state. */
 	schedule_work(&typec->port_work);
+
+	return IRQ_HANDLED;
 }
 
 static int cros_typec_init_dp_bridge(struct cros_typec_data *typec,
@@ -517,16 +519,25 @@ static int cros_typec_init_dp_bridge(struct cros_typec_data *typec,
 	if (IS_ERR(dp_bridge->mux_gpio))
 		return dev_err_probe(dev, PTR_ERR(dp_bridge->mux_gpio), "failed to get mux gpio\n");
 
+	dp_bridge->hpd_gpio = devm_gpiod_get_optional(dev, "hpd", GPIOD_IN);
+	if (IS_ERR(dp_bridge->hpd_gpio))
+		return dev_err_probe(dev, PTR_ERR(dp_bridge->hpd_gpio), "failed to get hpd gpio\n");
+	if (dp_bridge->hpd_gpio) {
+		ret = devm_request_threaded_irq(dev, gpiod_to_irq(dp_bridge->hpd_gpio),
+				       NULL, cros_typec_dp_bridge_hpd_handler,
+				       IRQF_TRIGGER_FALLING |
+				       IRQF_TRIGGER_RISING |
+				       IRQF_ONESHOT, "hpd", dp_bridge);
+		if (ret)
+			return ret;
+	}
+
 	num_lanes = fwnode_property_count_u32(ep, "data-lanes");
 	if (num_lanes < 0)
 		num_lanes = 4;
 	desc.num_dp_lanes = num_lanes;
 
 	desc.no_hpd = fwnode_property_read_bool(devnode, "no-hpd");
-	if (desc.no_hpd) {
-		desc.hpd_notify = cros_typec_dp_bridge_hpd_notify;
-		desc.hpd_data = dp_bridge;
-	}
 
 	dp_dev = devm_drm_dp_typec_bridge_alloc(dev, &desc);
 	if (IS_ERR(dp_dev))
