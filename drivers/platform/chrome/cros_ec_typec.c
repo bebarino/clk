@@ -592,17 +592,20 @@ static int cros_typec_enable_dp(struct cros_typec_data *typec,
 		return -ENOTSUPP;
 	}
 
-	if (!pd_ctrl->dp_mode) {
-		dev_err(typec->dev, "No valid DP mode provided.\n");
-		return -EINVAL;
-	}
-
 	/* Status VDO. */
 	dp_data.status = DP_STATUS_ENABLED;
 	if (port->mux_flags & USB_PD_MUX_HPD_IRQ)
 		dp_data.status |= DP_STATUS_IRQ_HPD;
 	if (port->mux_flags & USB_PD_MUX_HPD_LVL)
 		dp_data.status |= DP_STATUS_HPD_STATE;
+
+	/* Force a pin assignment when EC doesn't indicate any */
+	if (!pd_ctrl->dp_mode) {
+		pd_ctrl->dp_mode = DP_CONF_SET_PIN_ASSIGN(DP_PIN_ASSIGN_C);
+		/* Re-use old pinconf if present */
+		if (port->state.data)
+			pd_ctrl->dp_mode = DP_CONF_GET_PIN_ASSIGN(port->state.data->conf);
+	}
 
 	/* Configuration VDO. */
 	dp_data.conf = DP_CONF_SET_PIN_ASSIGN(pd_ctrl->dp_mode);
