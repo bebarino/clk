@@ -15,6 +15,7 @@
 #include <linux/platform_device.h>
 #include <linux/pm.h>
 #include <linux/pm_domain.h>
+#include <linux/pm_runtime.h>
 
 struct qcom_soc_pm_domain {
 	struct clk *clk;
@@ -60,13 +61,25 @@ qcom_soc_alloc_device(struct platform_device *socdev, const char *compatible)
 static int qcom_soc_domain_activate(struct device *dev)
 {
 	struct qcom_soc_pm_domain *soc_domain;
+	int ret;
 
 	dev_info(dev, "Activating device\n");
 	soc_domain = dev_to_qcom_soc_pm_domain(dev);
 
 	soc_domain->clk = devm_clk_get(dev, NULL);
+	if (IS_ERR(soc_domain->clk))
+		return PTR_ERR(soc_domain->clk);
 
-	return PTR_ERR_OR_ZERO(soc_domain->clk);
+	/* Figure out if device is enabled */
+	ret = pm_runtime_set_active(dev);
+	if (ret)
+		return ret;
+
+	ret = devm_pm_runtime_enable(dev);
+	if (ret)
+		return ret;
+
+	return 0;
 }
 
 static int qcom_soc_domain_power_on(struct generic_pm_domain *domain)
@@ -104,7 +117,7 @@ static int qcom_soc_add_clk_domain(struct platform_device *socdev,
 
 	pd = &domain->pd;
 	pd->name = "wdog";
-	ret = pm_genpd_init(pd, NULL, false);
+	ret = pm_genpd_init(pd, NULL, true);
 	if (ret)
 		return ret;
 
@@ -112,6 +125,9 @@ static int qcom_soc_add_clk_domain(struct platform_device *socdev,
 	pd->domain.activate = qcom_soc_domain_activate;
 	pd->power_on = qcom_soc_domain_power_on;
 	pd->power_off = qcom_soc_domain_power_off;
+
+	/* Tell driver that it is using a generic PM domain */
+	pdev->dev.platform_data = (void *)1UL;
 
 	dev_info(&socdev->dev, "adding pm domain for %s\n", dev_name(&pdev->dev));
 	dev_pm_domain_set(&pdev->dev, &pd->domain);
