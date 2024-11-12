@@ -63,43 +63,57 @@ static int qcom_soc_domain_activate(struct device *dev)
 	struct qcom_soc_pm_domain *soc_domain;
 	int ret;
 
-	dev_info(dev, "Activating device\n");
+	dev_info(dev, "sboyd: Activating device\n");
 	soc_domain = dev_to_qcom_soc_pm_domain(dev);
 
 	soc_domain->clk = devm_clk_get(dev, NULL);
 	if (IS_ERR(soc_domain->clk))
 		return PTR_ERR(soc_domain->clk);
 
+	dev_info(dev, "sboyd: %s: soc domain is %p\n", __func__, soc_domain);
+	pm_runtime_get_noresume(dev);
 	/* Figure out if device is enabled */
 	ret = pm_runtime_set_active(dev);
 	if (ret)
 		return ret;
 
-	ret = devm_pm_runtime_enable(dev);
+	ret = pm_runtime_enable(dev);
+	dev_info(dev, "sboyd: returned %d\n", ret);
 	if (ret)
 		return ret;
 
 	return 0;
 }
 
+static void qcom_soc_domain_detach(struct device *dev, bool power_off)
+{
+	dev_info(dev, "sboyd: detaching device\n");
+
+	pm_runtime_disable(dev);
+	pm_runtime_set_suspended(dev);
+	pm_runtime_put_noidle(dev);
+}
+
 static int qcom_soc_domain_power_on(struct generic_pm_domain *domain)
 {
 	struct qcom_soc_pm_domain *soc_domain;
 
-	pr_info("Powering on device\n");
+	pr_info("sboyd: Powering on device\n");
 	soc_domain = gpd_to_qcom_soc_pm_domain(domain);
 
-	return clk_prepare_enable(soc_domain->clk);
+	pr_info("sboyd: %s: soc domain is %p\n", __func__, soc_domain);
+	return 0; // clk_prepare_enable(soc_domain->clk);
 }
 
 static int qcom_soc_domain_power_off(struct generic_pm_domain *domain)
 {
 	struct qcom_soc_pm_domain *soc_domain;
 
-	pr_info("Powering off device\n");
+	pr_info("sboyd: Powering off device\n");
 	soc_domain = gpd_to_qcom_soc_pm_domain(domain);
 
-	clk_disable_unprepare(soc_domain->clk);
+	pr_info("sboyd: %s: soc domain is %p\n", __func__, soc_domain);
+	//clk_disable_unprepare(soc_domain->clk);
 
 	return 0;
 }
@@ -123,13 +137,14 @@ static int qcom_soc_add_clk_domain(struct platform_device *socdev,
 
 	/* TODO: Wrap this in a generic_pm_domain function similar to power_on() */
 	pd->domain.activate = qcom_soc_domain_activate;
+	pd->domain.detach = qcom_soc_domain_detach;
 	pd->power_on = qcom_soc_domain_power_on;
 	pd->power_off = qcom_soc_domain_power_off;
 
 	/* Tell driver that it is using a generic PM domain */
 	pdev->dev.platform_data = (void *)1UL;
 
-	dev_info(&socdev->dev, "adding pm domain for %s\n", dev_name(&pdev->dev));
+	dev_info(&socdev->dev, "sboyd: adding pm domain for %s\n", dev_name(&pdev->dev));
 	dev_pm_domain_set(&pdev->dev, &pd->domain);
 
 	return 0;
