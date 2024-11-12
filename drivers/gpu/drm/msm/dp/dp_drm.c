@@ -289,7 +289,7 @@ static const struct drm_bridge_funcs edp_bridge_ops = {
 };
 
 int dp_bridge_init(struct msm_dp *dp_display, struct drm_device *dev,
-			struct drm_encoder *encoder)
+		   struct drm_encoder *encoder, struct i2c_adapter *ddc)
 {
 	int rc;
 	struct msm_dp_bridge *dp_bridge;
@@ -304,6 +304,7 @@ int dp_bridge_init(struct msm_dp *dp_display, struct drm_device *dev,
 	bridge = &dp_bridge->bridge;
 	bridge->funcs = dp_display->is_edp ? &edp_bridge_ops : &dp_bridge_ops;
 	bridge->type = dp_display->connector_type;
+	bridge->ddc = ddc;
 
 	/*
 	 * Many ops only make sense for DP. Why?

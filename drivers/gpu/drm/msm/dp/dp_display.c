@@ -1460,6 +1460,7 @@ void dp_display_debugfs_init(struct msm_dp *dp_display, struct dentry *root, boo
 int msm_dp_modeset_init(struct msm_dp *dp_display, struct drm_device *dev,
 			struct drm_encoder *encoder, bool yuv_supported)
 {
+	struct drm_dp_aux *dp_aux;
 	struct dp_display_private *dp_priv;
 	int ret;
 
@@ -1467,7 +1468,8 @@ int msm_dp_modeset_init(struct msm_dp *dp_display, struct drm_device *dev,
 
 	dp_priv = container_of(dp_display, struct dp_display_private, dp_display);
 
-	ret = dp_bridge_init(dp_display, dev, encoder);
+	dp_aux = dp_priv->aux;
+	ret = dp_bridge_init(dp_display, dev, encoder, &dp_aux->ddc);
 	if (ret) {
 		DRM_DEV_ERROR(dev->dev,
 			"failed to create dp bridge: %d\n", ret);

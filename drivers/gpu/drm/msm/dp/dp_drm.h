@@ -17,12 +17,14 @@ struct msm_dp_bridge {
 	struct msm_dp *dp_display;
 };
 
+struct i2c_adapter;
+
 #define to_dp_bridge(x)     container_of((x), struct msm_dp_bridge, bridge)
 
 struct drm_connector *dp_drm_connector_init(struct msm_dp *dp_display, struct drm_encoder *encoder,
 					    bool yuv_supported);
 int dp_bridge_init(struct msm_dp *dp_display, struct drm_device *dev,
-			struct drm_encoder *encoder);
+			struct drm_encoder *encoder, struct i2c_adapter *ddc);
 
 void dp_bridge_atomic_enable(struct drm_bridge *drm_bridge,
 			     struct drm_bridge_state *old_bridge_state);
