@@ -178,6 +178,9 @@ properties:
           vdo:
             $ref: /schemas/types.yaml#/definitions/uint32
             description: VDO returned by Discover Modes USB PD command.
+          orientation-reversed:
+            type: boolean
+            description: Whether the DP altmode orientation is reversed.
 
   port:
     $ref: /schemas/graph.yaml#/properties/port
