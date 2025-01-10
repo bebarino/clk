@@ -3415,7 +3415,7 @@ out:
  *
  * Returns: A reference to the found connector or an ERR_PTR().
  */
-struct drm_connector *drm_connector_find_by_fwnode(struct fwnode_handle *fwnode)
+static struct drm_connector *drm_connector_find_by_fwnode(struct fwnode_handle *fwnode)
 {
 	struct drm_connector *connector, *found = ERR_PTR(-ENODEV);
 
