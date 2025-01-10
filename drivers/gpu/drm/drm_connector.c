@@ -3417,16 +3417,26 @@ out:
  */
 static struct drm_connector *drm_connector_find_by_fwnode(struct fwnode_handle *fwnode)
 {
+	struct fwnode_handle *parent_fwnode;
 	struct drm_connector *connector, *found = ERR_PTR(-ENODEV);
 
 	if (!fwnode)
 		return ERR_PTR(-ENODEV);
 
+	/*
+	 * Try the parent in case the node is a child, e.g. a usb-c-connector
+	 * node that's a child of the TCPM node.
+	 */
+	parent_fwnode = fwnode_get_parent(fwnode);
+
 	mutex_lock(&connector_list_lock);
 
 	list_for_each_entry(connector, &connector_list, global_connector_list_entry) {
 		if (connector->fwnode == fwnode ||
-		    (connector->fwnode && connector->fwnode->secondary == fwnode)) {
+		    (connector->fwnode && connector->fwnode->secondary == fwnode) ||
+		    (parent_fwnode &&
+		     (connector->fwnode == parent_fwnode ||
+		      (connector->fwnode && connector->fwnode->secondary == fwnode)))) {
 			drm_connector_get(connector);
 			found = connector;
 			break;
@@ -3434,6 +3444,8 @@ static struct drm_connector *drm_connector_find_by_fwnode(struct fwnode_handle *
 	}
 
 	mutex_unlock(&connector_list_lock);
+
+	fwnode_handle_put(parent_fwnode);
 
 	return found;
 }
