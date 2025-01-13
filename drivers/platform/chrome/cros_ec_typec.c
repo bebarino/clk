@@ -428,7 +428,9 @@ unregister_ports:
 	return ret;
 }
 
-static void cros_typec_dp_bridge_hpd_notify(struct drm_bridge *bridge, enum drm_connector_status status)
+static void cros_typec_dp_bridge_hpd_notify(struct drm_bridge *bridge,
+					    struct drm_connector *connector,
+					    enum drm_connector_status status)
 {
 	struct cros_typec_dp_bridge *dp_bridge = bridge_to_cros_typec_dp_bridge(bridge);
 	struct cros_typec_data *typec = dp_bridge->typec_data;
