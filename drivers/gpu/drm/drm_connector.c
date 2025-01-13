@@ -3467,6 +3467,28 @@ void drm_connector_oob_hotplug_event(struct fwnode_handle *connector_fwnode,
 }
 EXPORT_SYMBOL(drm_connector_oob_hotplug_event);
 
+bool drm_connector_dp_typec_orientation_flipped(struct drm_connector *connector)
+{
+	struct fwnode_handle *altmodes;
+	struct fwnode_handle *dp;
+	struct fwnode_handle *fwnode = connector->fwnode;
+	bool ret;
+
+	altmodes = fwnode_get_named_child_node(fwnode, "altmodes");
+	if (!altmodes)
+		return false;
+
+	dp = fwnode_get_named_child_node(altmodes, "displayport");
+	fwnode_handle_put(altmodes);
+	if (!dp)
+		return false;
+
+	ret = fwnode_property_read_bool(dp, "orientation-reversed");
+	fwnode_handle_put(dp);
+
+	return ret;
+}
+EXPORT_SYMBOL(drm_connector_dp_typec_orientation_flipped);
 
 /**
  * DOC: Tile group
