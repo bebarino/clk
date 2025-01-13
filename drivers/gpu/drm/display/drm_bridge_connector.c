@@ -122,6 +122,7 @@ static void drm_bridge_connector_hpd_notify(struct drm_connector *connector,
 }
 
 static void drm_bridge_connector_handle_hpd(struct drm_bridge_connector *drm_bridge_connector,
+					    struct fwnode_handle *connector_fwnode,
 					    enum drm_connector_status status)
 {
 	struct drm_connector *connector = &drm_bridge_connector->base;
@@ -139,16 +140,17 @@ static void drm_bridge_connector_handle_hpd(struct drm_bridge_connector *drm_bri
 static void drm_bridge_connector_hpd_cb(void *cb_data,
 					enum drm_connector_status status)
 {
-	drm_bridge_connector_handle_hpd(cb_data, status);
+	drm_bridge_connector_handle_hpd(cb_data, NULL, status);
 }
 
 static void drm_bridge_connector_oob_hotplug_event(struct drm_connector *connector,
+						   struct fwnode_handle *connector_fwnode,
 						   enum drm_connector_status status)
 {
 	struct drm_bridge_connector *bridge_connector =
 		to_drm_bridge_connector(connector);
 
-	drm_bridge_connector_handle_hpd(bridge_connector, status);
+	drm_bridge_connector_handle_hpd(bridge_connector, connector_fwnode, status);
 }
 
 static void drm_bridge_connector_enable_hpd(struct drm_connector *connector)

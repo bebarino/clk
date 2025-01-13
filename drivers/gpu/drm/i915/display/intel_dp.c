@@ -6119,6 +6119,7 @@ static int intel_dp_connector_atomic_check(struct drm_connector *conn,
 }
 
 static void intel_dp_oob_hotplug_event(struct drm_connector *connector,
+				       struct fwnode_handle *connector_fwnode,
 				       enum drm_connector_status hpd_state)
 {
 	struct intel_display *display = to_intel_display(connector->dev);

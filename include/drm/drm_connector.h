@@ -1569,6 +1569,7 @@ struct drm_connector_funcs {
 	 * has been received from a source outside the display driver / device.
 	 */
 	void (*oob_hotplug_event)(struct drm_connector *connector,
+				  struct fwnode_handle *connector_fwnode,
 				  enum drm_connector_status status);
 
 	/**
