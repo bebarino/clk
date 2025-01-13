@@ -1695,6 +1695,8 @@ void msm_dp_bridge_hpd_notify(struct drm_bridge *bridge,
 	struct msm_dp *msm_dp_display = msm_dp_bridge->msm_dp_display;
 	struct msm_dp_display_private *dp = container_of(msm_dp_display, struct msm_dp_display_private, msm_dp_display);
 
+	pr_info("connector is %s orientation\n", drm_connector_dp_typec_orientation_flipped(connector) ? "flipped" : "normal");
+
 	/* Without next_bridge interrupts are handled by the DP core directly */
 	if (msm_dp_display->internal_hpd)
 		return;
