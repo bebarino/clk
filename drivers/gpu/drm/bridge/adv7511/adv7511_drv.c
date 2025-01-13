@@ -987,6 +987,7 @@ static const struct drm_edid *adv7511_bridge_edid_read(struct drm_bridge *bridge
 }
 
 static void adv7511_bridge_hpd_notify(struct drm_bridge *bridge,
+				      struct drm_connector *connector,
 				      enum drm_connector_status status)
 {
 	struct adv7511 *adv = bridge_to_adv7511(bridge);
