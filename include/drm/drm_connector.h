@@ -2491,7 +2491,7 @@ bool drm_connector_has_possible_encoder(struct drm_connector *connector,
 					struct drm_encoder *encoder);
 const char *drm_get_colorspace_name(enum drm_colorspace colorspace);
 
-bool drm_connector_dp_typec_orientation_flipped(struct drm_connector *connector);
+bool drm_connector_dp_typec_orientation_flipped(struct fwnode_handle *connector_fwnode);
 
 /**
  * drm_for_each_connector_iter - connector_list iterator macro
