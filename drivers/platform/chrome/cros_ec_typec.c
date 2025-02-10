@@ -429,7 +429,7 @@ unregister_ports:
 }
 
 static void cros_typec_dp_bridge_hpd_notify(struct drm_bridge *bridge,
-					    struct drm_connector *connector,
+					    struct fwnode_handle *connector_fwnode,
 					    enum drm_connector_status status)
 {
 	struct cros_typec_dp_bridge *dp_bridge = bridge_to_cros_typec_dp_bridge(bridge);
