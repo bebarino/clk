@@ -650,7 +650,7 @@ struct drm_connector *drm_bridge_connector_init(struct drm_device *drm,
 }
 EXPORT_SYMBOL_GPL(drm_bridge_connector_init);
 
-int drm_bridge_connector_init_and_attach(struct drm_device *drm, struct drm_encoder *encoder)
+struct drm_connector *drm_bridge_connector_init_and_attach(struct drm_device *drm, struct drm_encoder *encoder)
 {
 	struct fwnode_handle *fwnode, *child;
 	struct drm_connector *connector;
@@ -658,7 +658,7 @@ int drm_bridge_connector_init_and_attach(struct drm_device *drm, struct drm_enco
 
 	connector = drm_bridge_connector_init(drm, encoder);
 	if (IS_ERR(connector))
-		return PTR_ERR(connector);
+		return connector;
 
 	fwnode = connector->fwnode;
 	connector->fwnode = NULL;
@@ -669,10 +669,10 @@ int drm_bridge_connector_init_and_attach(struct drm_device *drm, struct drm_enco
 				bridge_connector = drmm_kzalloc(drm, sizeof(*bridge_connector), GFP_KERNEL);
 				if (!bridge_connector) {
 					fwnode_handle_put(child);
-					return -ENOMEM;
+					return ERR_PTR(-ENOMEM);
 				}
 				memcpy(bridge_connector, to_drm_bridge_connector(connector), sizeof(*bridge_connector));
-				connector = &bridge_connector->connector;
+				connector = &bridge_connector->base;
 			}
 			connector->fwnode = fwnode_handle_get(child);
 			drm_connector_attach_encoder(connector, encoder);
@@ -684,5 +684,7 @@ int drm_bridge_connector_init_and_attach(struct drm_device *drm, struct drm_enco
 	} else {
 		fwnode_handle_put(fwnode);
 	}
+
+	return connector;
 }
 EXPORT_SYMBOL_GPL(drm_bridge_connector_init_and_attach);

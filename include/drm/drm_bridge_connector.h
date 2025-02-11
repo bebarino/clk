@@ -12,6 +12,6 @@ struct drm_encoder;
 
 struct drm_connector *drm_bridge_connector_init(struct drm_device *drm,
 						struct drm_encoder *encoder);
-int drm_bridge_connector_init_and_attach(struct drm_device *drm, struct drm_encoder *encoder);
+struct drm_connector *drm_bridge_connector_init_and_attach(struct drm_device *drm, struct drm_encoder *encoder);
 
 #endif /* __DRM_BRIDGE_CONNECTOR_H__ */

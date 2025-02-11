@@ -357,14 +357,12 @@ struct drm_connector *msm_dp_drm_connector_init(struct msm_dp *msm_dp_display,
 {
 	struct drm_connector *connector = NULL;
 
-	connector = drm_bridge_connector_init(msm_dp_display->drm_dev, encoder);
+	connector = drm_bridge_connector_init_and_attach(msm_dp_display->drm_dev, encoder);
 	if (IS_ERR(connector))
 		return connector;
 
 	if (!msm_dp_display->is_edp)
 		drm_connector_attach_dp_subconnector_property(connector);
-
-	drm_connector_attach_encoder(connector, encoder);
 
 	return connector;
 }
