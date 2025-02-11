@@ -649,3 +649,40 @@ struct drm_connector *drm_bridge_connector_init(struct drm_device *drm,
 	return connector;
 }
 EXPORT_SYMBOL_GPL(drm_bridge_connector_init);
+
+int drm_bridge_connector_init_and_attach(struct drm_device *drm, struct drm_encoder *encoder)
+{
+	struct fwnode_handle *fwnode, *child;
+	struct drm_connector *connector;
+	struct drm_bridge_connector *bridge_connector;
+
+	connector = drm_bridge_connector_init(drm, encoder);
+	if (IS_ERR(connector))
+		return PTR_ERR(connector);
+
+	fwnode = connector->fwnode;
+	connector->fwnode = NULL;
+	fwnode_for_each_available_child_node(fwnode, child) {
+		if (fwnode_device_is_compatible(child, "usb-c-connector")) {
+			/* Duplicating case */
+			if (connector->fwnode) {
+				bridge_connector = drmm_kzalloc(drm, sizeof(*bridge_connector), GFP_KERNEL);
+				if (!bridge_connector) {
+					fwnode_handle_put(child);
+					return -ENOMEM;
+				}
+				memcpy(bridge_connector, to_drm_bridge_connector(connector), sizeof(*bridge_connector));
+				connector = &bridge_connector->connector;
+			}
+			connector->fwnode = fwnode_handle_get(child);
+			drm_connector_attach_encoder(connector, encoder);
+		}
+	}
+	if (!connector->fwnode) {
+		connector->fwnode = fwnode;
+		drm_connector_attach_encoder(connector, encoder);
+	} else {
+		fwnode_handle_put(fwnode);
+	}
+}
+EXPORT_SYMBOL_GPL(drm_bridge_connector_init_and_attach);
