@@ -654,7 +654,6 @@ struct drm_connector *drm_bridge_connector_init_and_attach(struct drm_device *dr
 {
 	struct fwnode_handle *fwnode, *child;
 	struct drm_connector *connector;
-	struct drm_bridge_connector *bridge_connector;
 
 	connector = drm_bridge_connector_init(drm, encoder);
 	if (IS_ERR(connector))
@@ -666,13 +665,12 @@ struct drm_connector *drm_bridge_connector_init_and_attach(struct drm_device *dr
 		if (fwnode_device_is_compatible(child, "usb-c-connector")) {
 			/* Duplicating case */
 			if (connector->fwnode) {
-				bridge_connector = drmm_kzalloc(drm, sizeof(*bridge_connector), GFP_KERNEL);
-				if (!bridge_connector) {
+				connector = drm_bridge_connector_init(drm, encoder);
+				if (IS_ERR(connector)) {
 					fwnode_handle_put(child);
 					return ERR_PTR(-ENOMEM);
 				}
-				memcpy(bridge_connector, to_drm_bridge_connector(connector), sizeof(*bridge_connector));
-				connector = &bridge_connector->base;
+				fwnode_handle_put(connector->fwnode);
 			}
 			connector->fwnode = fwnode_handle_get(child);
 			drm_connector_attach_encoder(connector, encoder);
