@@ -7,14 +7,18 @@
  */
 
 #include <linux/acpi.h>
+#include <linux/gpio/consumer.h>
 #include <linux/module.h>
 #include <linux/of.h>
+#include <linux/of_graph.h>
 #include <linux/platform_data/cros_ec_commands.h>
 #include <linux/platform_data/cros_usbpd_notify.h>
 #include <linux/platform_device.h>
 #include <linux/usb/pd_vdo.h>
 #include <linux/usb/typec_dp.h>
 #include <linux/usb/typec_tbt.h>
+
+#include <drm/drm_bridge.h>
 
 #include "cros_ec_typec.h"
 #include "cros_typec_vdm.h"
@@ -337,6 +341,9 @@ static int cros_typec_init_ports(struct cros_typec_data *typec)
 	u32 port_num = 0;
 
 	nports = device_get_child_node_count(dev);
+	/* Don't count any 'ports' child node */
+	if (of_graph_is_present(dev->of_node))
+		nports--;
 	if (nports == 0) {
 		dev_err(dev, "No port entries found.\n");
 		return -ENODEV;
@@ -350,6 +357,10 @@ static int cros_typec_init_ports(struct cros_typec_data *typec)
 	/* DT uses "reg" to specify port number. */
 	port_prop = dev->of_node ? "reg" : "port-number";
 	device_for_each_child_node(dev, fwnode) {
+		/* An OF graph isn't a connector */
+		if (fwnode_name_eq(fwnode, "ports"))
+			continue;
+
 		if (fwnode_property_read_u32(fwnode, port_prop, &port_num)) {
 			ret = -EINVAL;
 			dev_err(dev, "No port-number for port, aborting.\n");
@@ -415,6 +426,83 @@ unregister_ports:
 	fwnode_handle_put(fwnode);
 	cros_unregister_ports(typec);
 	return ret;
+}
+
+static void cros_typec_dp_bridge_hpd_notify(struct drm_bridge *bridge, enum drm_connector_status status)
+{
+	struct cros_typec_dp_bridge *dp_bridge = bridge_to_cros_typec_dp_bridge(bridge);
+	struct cros_typec_data *typec = dp_bridge->typec_data;
+	struct gpio_desc *mux_gpio = dp_bridge->mux_gpio;
+	int val;
+	DECLARE_BITMAP(orig, EC_USB_PD_MAX_PORTS);
+	DECLARE_BITMAP(changed, EC_USB_PD_MAX_PORTS);
+
+	if (!mux_gpio)
+		return;
+
+	/* This bridge signals HPD so it must be able to detect HPD properly */
+	if (dp_bridge->bridge.ops & DRM_BRIDGE_OP_HPD)
+		return;
+
+	bitmap_copy(orig, dp_bridge->hpd_asserted, EC_USB_PD_MAX_PORTS);
+	bitmap_zero(changed, EC_USB_PD_MAX_PORTS);
+
+	if (status == connector_status_connected) {
+		val = gpiod_get_value_cansleep(mux_gpio);
+		if (val < 0) {
+			dev_err(typec->dev, "Failed to read mux gpio\n");
+			return;
+		}
+		__set_bit(val, changed);
+	}
+
+	bitmap_copy(dp_bridge->hpd_asserted, changed, EC_USB_PD_MAX_PORTS);
+
+	/* Refresh port state. */
+	if (!bitmap_equal(orig, changed, EC_USB_PD_MAX_PORTS))
+		schedule_work(&typec->port_work);
+}
+
+static int cros_typec_dp_bridge_attach(struct drm_bridge *bridge,
+				       enum drm_bridge_attach_flags flags)
+{
+	return flags & DRM_BRIDGE_ATTACH_NO_CONNECTOR ? 0 : -EINVAL;
+}
+
+static const struct drm_bridge_funcs cros_typec_dp_bridge_funcs = {
+	.attach	= cros_typec_dp_bridge_attach,
+	.hpd_notify = cros_typec_dp_bridge_hpd_notify,
+};
+
+static int cros_typec_init_dp_bridge(struct cros_typec_data *typec)
+{
+	struct device *dev = typec->dev;
+	struct cros_typec_dp_bridge *dp_bridge;
+	struct drm_bridge *bridge;
+	struct device_node *np = dev->of_node;
+
+	/* Not capable of DP altmode switching. Ignore. */
+	if (!of_graph_is_present(np))
+		return 0;
+
+	dp_bridge = devm_kzalloc(dev, sizeof(*dp_bridge), GFP_KERNEL);
+	if (!dp_bridge)
+		return -ENOMEM;
+	typec->dp_bridge = dp_bridge;
+	dp_bridge->typec_data = typec;
+
+	dp_bridge->mux_gpio = devm_gpiod_get_optional(dev, "mux", GPIOD_ASIS);
+	if (IS_ERR(dp_bridge->mux_gpio))
+		return dev_err_probe(dev, PTR_ERR(dp_bridge->mux_gpio), "failed to get mux gpio\n");
+
+	bridge = &dp_bridge->bridge;
+	bridge->funcs = &cros_typec_dp_bridge_funcs;
+	bridge->of_node = np;
+	bridge->type = DRM_MODE_CONNECTOR_DisplayPort;
+	if (!device_property_read_bool(dev, "no-hpd"))
+		bridge->ops |= DRM_BRIDGE_OP_HPD;
+
+	return devm_drm_bridge_add(dev, bridge);
 }
 
 static int cros_typec_usb_safe_state(struct cros_typec_port *port)
@@ -531,7 +619,7 @@ static int cros_typec_enable_dp(struct cros_typec_data *typec,
 	}
 
 	/* Status VDO. */
-	dp_data.status = DP_STATUS_ENABLED;
+	dp_data.status = DP_STATUS_ENABLED | DP_STATUS_CON_UFP_D | DP_STATUS_PREFER_MULTI_FUNC;
 	if (port->mux_flags & USB_PD_MUX_HPD_IRQ)
 		dp_data.status |= DP_STATUS_IRQ_HPD;
 	if (port->mux_flags & USB_PD_MUX_HPD_LVL)
@@ -616,6 +704,77 @@ static int cros_typec_enable_usb4(struct cros_typec_data *typec,
 	return typec_mux_set(port->mux, &port->state);
 }
 
+/*
+ * Some ECs like to tell AP that both ports have DP enabled when that's
+ * impossible because the EC is muxing DP to one or the other port. Check the
+ * mux on the EC in this case and ignore what the EC tells us about DP on the
+ * port that isn't actually muxed for DP.
+ */
+void cros_typec_check_dp(struct cros_typec_data *typec,
+			 struct ec_response_usb_pd_mux_info *resp,
+			 struct cros_typec_port *port)
+{
+	struct cros_typec_dp_bridge *dp_bridge = typec->dp_bridge;
+	struct gpio_desc *mux_gpio;
+	int val;
+
+	/* Never registered a drm_bridge. Skip. */
+	if (!dp_bridge)
+		return;
+
+	/* Don't need to override DP enabled when DP isn't enabled. */
+	if (!(resp->flags & USB_PD_MUX_DP_ENABLED))
+		return;
+
+	mux_gpio = dp_bridge->mux_gpio;
+	/* EC mux is required to determine which port actually has DP on it. */
+	if (!mux_gpio)
+		return;
+
+	val = gpiod_get_value_cansleep(mux_gpio);
+	if (val < 0) {
+		dev_err(typec->dev, "Failed to read mux gpio\n");
+		return;
+	}
+
+	/* Only the muxed port can have DP enabled. Ignore. */
+	if (val != port->port_num)
+		resp->flags &= ~USB_PD_MUX_DP_ENABLED;
+}
+
+/*
+ * Some ECs don't notify AP when HPD goes high or low because their firmware is
+ * broken. Capture the state of HPD in cros_typec_dp_bridge_hpd_notify() and
+ * inject the asserted state into the EC's response (deasserted is the
+ * default).
+ */
+static void cros_typec_inject_hpd(struct cros_typec_data *typec,
+				  struct ec_response_usb_pd_mux_info *resp,
+				  struct cros_typec_port *port)
+{
+	struct cros_typec_dp_bridge *dp_bridge = typec->dp_bridge;
+
+	/* Never registered a drm_bridge. Skip. */
+	if (!dp_bridge)
+		return;
+
+	/* Don't need to inject HPD level when DP isn't enabled. */
+	if (!(resp->flags & USB_PD_MUX_DP_ENABLED))
+		return;
+
+	/* This bridge signals HPD so it doesn't need to be reinjected */
+	if (dp_bridge->bridge.ops & DRM_BRIDGE_OP_HPD)
+		return;
+
+	/*
+	 * The default setting is HPD deasserted. Ignore if nothing to inject.
+	 */
+	if (!test_bit(port->port_num, dp_bridge->hpd_asserted))
+		return;
+
+	resp->flags |= USB_PD_MUX_HPD_LVL;
+}
+
 static int cros_typec_configure_mux(struct cros_typec_data *typec, int port_num,
 				struct ec_response_usb_pd_control_v2 *pd_ctrl)
 {
@@ -636,6 +795,8 @@ static int cros_typec_configure_mux(struct cros_typec_data *typec, int port_num,
 			 port_num, ret);
 		return ret;
 	}
+	cros_typec_check_dp(typec, &resp, port);
+	cros_typec_inject_hpd(typec, &resp, port);
 
 	/* No change needs to be made, let's exit early. */
 	if (port->mux_flags == resp.flags && port->role == pd_ctrl->role)
@@ -1275,6 +1436,10 @@ static int cros_typec_probe(struct platform_device *pdev)
 			 typec->num_ports, EC_USB_PD_MAX_PORTS);
 		typec->num_ports = EC_USB_PD_MAX_PORTS;
 	}
+
+	ret = cros_typec_init_dp_bridge(typec);
+	if (ret < 0)
+		return ret;
 
 	ret = cros_typec_init_ports(typec);
 	if (ret < 0)

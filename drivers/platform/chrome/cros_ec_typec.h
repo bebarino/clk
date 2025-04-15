@@ -6,6 +6,7 @@
 #include <linux/list.h>
 #include <linux/notifier.h>
 #include <linux/platform_data/cros_ec_proto.h>
+#include <linux/types.h>
 #include <linux/usb/pd.h>
 #include <linux/usb/role.h>
 #include <linux/usb/typec.h>
@@ -13,6 +14,8 @@
 #include <linux/usb/typec_mux.h>
 #include <linux/usb/typec_retimer.h>
 #include <linux/workqueue.h>
+
+#include <drm/drm_bridge.h>
 
 /* Supported alt modes. */
 enum {
@@ -35,6 +38,7 @@ struct cros_typec_data {
 	unsigned int pd_ctrl_ver;
 	/* Array of ports, indexed by port number. */
 	struct cros_typec_port *ports[EC_USB_PD_MAX_PORTS];
+	struct cros_typec_dp_bridge *dp_bridge;
 	struct notifier_block nb;
 	struct work_struct port_work;
 	bool typec_cmd_supported;
@@ -82,5 +86,22 @@ struct cros_typec_port {
 
 	struct cros_typec_data *typec_data;
 };
+
+struct cros_typec_dp_bridge {
+	struct drm_bridge bridge;
+	struct cros_typec_data *typec_data;
+	struct gpio_desc *mux_gpio;
+	DECLARE_BITMAP(hpd_asserted, EC_USB_PD_MAX_PORTS);
+};
+
+static inline struct cros_typec_dp_bridge *
+bridge_to_cros_typec_dp_bridge(struct drm_bridge *bridge)
+{
+	return container_of(bridge, struct cros_typec_dp_bridge, bridge);
+}
+
+void cros_typec_check_dp(struct cros_typec_data *typec,
+			 struct ec_response_usb_pd_mux_info *resp,
+			 struct cros_typec_port *port);
 
 #endif /*  __CROS_EC_TYPEC__ */
